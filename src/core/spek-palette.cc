@@ -1,7 +1,15 @@
 #include <assert.h>
 #include <math.h>
+#include <numbers>
 
 #include "spek-palette.h"
+
+// The C++ standard spells pi this way; the BSD/GNU macro is not portable
+// because MSVC only defines it when _USE_MATH_DEFINES is set first.
+namespace
+{
+constexpr double pi = std::numbers::pi;
+}
 
 // Modified version of Dan Bruton's algorithm:
 // http://www.physics.sfasu.edu/astro/color/spectra.html
@@ -50,21 +58,21 @@ static uint32_t sox(double level)
 {
     double r = 0.0;
     if (level >= 0.13 && level < 0.73) {
-        r = sin((level - 0.13) / 0.60 * M_PI / 2.0);
+        r = sin((level - 0.13) / 0.60 * pi / 2.0);
     } else if (level >= 0.73) {
         r = 1.0;
     }
 
     double g = 0.0;
     if (level >= 0.6 && level < 0.91) {
-        g = sin((level - 0.6) / 0.31 * M_PI / 2.0);
+        g = sin((level - 0.6) / 0.31 * pi / 2.0);
     } else if (level >= 0.91) {
         g = 1.0;
     }
 
     double b = 0.0;
     if (level < 0.60) {
-        b = 0.5 * sin(level / 0.6 * M_PI);
+        b = 0.5 * sin(level / 0.6 * pi);
     } else if (level >= 0.78) {
         b = (level - 0.78) / 0.22;
     }
