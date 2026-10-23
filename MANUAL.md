@@ -22,6 +22,64 @@ Spek - Acoustic Spectrum Analyser
 `-V`, `--version`
 :   Output version information then quit.
 
+`-c`, `--cli`
+:   Run without the graphical interface, see *BATCH PROCESSING* below.
+
+`-i`, `--input` *PATH*
+:   Audio file or directory to analyse.
+
+`-o`, `--output` *PATH*
+:   PNG file to write, or a directory when analysing more than one file.
+
+`-w`, `--width` *N*
+:   Width of the image in pixels, 1024 by default.
+
+`-H`, `--height` *N*
+:   Height of the image in pixels, one pixel per FFT band by default.
+
+`--fft-bits` *N*
+:   Size of the DFT window: 2^*N* samples, 11 (2048 samples) by default.
+
+`--stream` *N*
+:   Audio stream to analyse, zero-based.
+
+`--channel` *N*
+:   Audio channel to analyse, zero-based.
+
+`--min-db` *N*
+:   Lower limit of the dynamic range in dBFS, -120 by default.
+
+`--max-db` *N*
+:   Upper limit of the dynamic range in dBFS, 0 by default.
+
+`--palette` *NAME*
+:   Palette to use: `sox` (the default), `spectrum` or `mono`.
+
+`--window` *NAME*
+:   DFT window function: `hann` (the default), `hamming` or `blackman-harris`.
+
+`-r`, `--recursive`
+:   Recurse into the sub-directories of the input directory.
+
+`-j`, `--jobs` *N*
+:   Number of files to analyse in parallel.
+
+`-q`, `--quiet`
+:   Do not print the progress information.
+
+# BATCH PROCESSING
+
+Without `--cli` *Spek* opens the graphical interface. When `--cli` (or
+`--input`) is given, *Spek* analyses the files and saves the spectrograms as
+PNG images without opening a window:
+
+    spek --cli --input song.flac --output song.png
+    spek --cli --input '~/Music' --output spectrograms --recursive --jobs 4
+
+When the input is a directory, every file with a known audio extension is
+analysed and the images are written into the output directory (or next to the
+input files when `--output` is omitted), keeping the name of the source file.
+
 # KEYBINDINGS
 
 ## Notes

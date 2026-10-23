@@ -1,0 +1,21 @@
+{
+  "name": "spek",
+  "version-string": "0.8.5",
+  "description": "Acoustic spectrum analyser",
+  "homepage": "https://www.spek.cc/",
+  "license": "GPL-3.0-or-later",
+  "dependencies": [
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [
+        "avcodec",
+        "avformat",
+        "swresample"
+      ]
+    },
+    "wxwidgets",
+    "zlib"
+  ],
+  "builtin-baseline": "5a874b05fb981e2643fd0c1c9ad63e19dfe76b27"
+}

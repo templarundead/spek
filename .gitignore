@@ -7,51 +7,47 @@
 *.zip
 *~
 .DS_Store
-.deps
-ABOUT-NLS
+
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
 Makefile
-Makefile.in
-Makefile.in.in
-aclocal.m4
-autom4te.cache
-ar-lib
-compile
-config.*
-configure
+install_manifest.txt
+
+# vcpkg
+vcpkg_installed/
+vcpkg-bincache/
+
+# Generated data files
 data/spek.desktop
 data/spek.metainfo.xml
-depcomp
 dist/osx/Info.plist
 dist/osx/Spek.app
 dist/osx/Spek.dmg
 dist/win/Spek
 dist/win/spek.wxs
 dist/win/tests
-env
-install-sh
-libtool
-ltmain.sh
-m4/
 man/spek.1
-missing
-mkinstalldirs
-omf.make
-po/*.header
+
+# Packaging
+env
+
+# Gettext
 po/*.gmo
+po/*.mo
 po/*.sed
 po/*.sin
-po/*.template
 po/POTFILES
-po/Rules-quot
-po/stamp-it
 po/stamp-po
-src/*.stamp
-src/.libs
-src/spek
-stamp-h1
-tests/.libs
+
+# Tests
 tests/perf
 tests/samples/perf.wav
 tests/test
 web/version
-xmldocs.make

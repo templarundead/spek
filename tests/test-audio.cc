@@ -1,4 +1,20 @@
+// Copyright (C) 2010-2013 Alexander Kojevnikov and contributors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <map>
+#include <string>
 
 #include "spek-audio.h"
 
@@ -14,6 +30,10 @@ struct FileInfo
     int channels;
     double duration;
     int samples;
+    // FFmpeg 7 and newer drop the encoder delay of MP3 and AAC files, so
+    // their sizes are only known up to a couple of frames.
+    double duration_tolerance = 0.0;
+    int samples_tolerance = 0;
 };
 
 static void test_info(AudioFile *file, const FileInfo& info)
@@ -26,10 +46,10 @@ static void test_info(AudioFile *file, const FileInfo& info)
     test("sample rate", info.sample_rate, file->get_sample_rate());
     test("bps", info.bits_per_sample, file->get_bits_per_sample());
     test("channels", info.channels, file->get_channels());
-    test("duration", info.duration, file->get_duration());
+    test_near("duration", info.duration, file->get_duration(), info.duration_tolerance);
 }
 
-static void test_read(AudioFile *file, int samples)
+static void test_read(AudioFile *file, int samples, int samples_tolerance)
 {
     if (!file->get_error()) {
         file->start(0, 1024);
@@ -41,12 +61,12 @@ static void test_read(AudioFile *file, int samples)
     while ((len = file->read()) > 0) {
         samples_read += len;
         for (int i = 0; i < len; ++i) {
-            float level = file->get_buffer()[i];
+            float level = file->get_buffer()[static_cast<size_t>(i)];
             power += level * level;
         }
     }
 
-    test("samples", samples, samples_read);
+    test_near("samples", samples, samples_read, samples_tolerance);
 
     if (samples > 0) {
         power /= samples_read;
@@ -60,7 +80,9 @@ static void test_read(AudioFile *file, int samples)
 void test_audio()
 {
     const double MP3_T = 5.0 * 1152 / 44100; // 5 frames * duration per mp3 frame
+    const double MP3_T_TOLERANCE = 2.0 * 1152 / 44100; // two frames
     const double AAC_T = (10240 + 628) / 2.0 / 44100;
+    const int AAC_SAMPLES_TOLERANCE = 1024; // one frame
     const double DCA_T = 8.0 * 21180 / 1411216; // file size / bit rate
     const double AC3_T = 8.0 * 2490 / 190764; // file size / bit rate
 
@@ -84,15 +106,15 @@ void test_audio()
         {"2ch-44100Hz-16bps.wav",
             {AudioError::OK, "PCM", 0, 44100, 16, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-128cbr.mp3",
-            {AudioError::OK, "MP3", 128000, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 128000, 44100, 0, 2, MP3_T, 44100 / 10, MP3_T_TOLERANCE}},
         {"2ch-44100Hz-320cbr.mp3",
-            {AudioError::OK, "MP3", 320000, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 320000, 44100, 0, 2, MP3_T, 44100 / 10, MP3_T_TOLERANCE}},
         {"2ch-44100Hz-V0.mp3",
-            {AudioError::OK, "MP3", 201329, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 201329, 44100, 0, 2, MP3_T, 44100 / 10, MP3_T_TOLERANCE}},
         {"2ch-44100Hz-V2.mp3",
-            {AudioError::OK, "MP3", 150124, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 150124, 44100, 0, 2, MP3_T, 44100 / 10, MP3_T_TOLERANCE}},
         {"2ch-44100Hz-q100.m4a",
-            {AudioError::OK, "AAC", 159649, 44100, 0, 2, AAC_T, 5120}},
+            {AudioError::OK, "AAC", 159649, 44100, 0, 2, AAC_T, 5120, 0.0, AAC_SAMPLES_TOLERANCE}},
         {"2ch-44100Hz-q5.ogg",
             {AudioError::OK, "Vorbis", 160000, 44100, 0, 2, 0.1, 4282}},
         {"2ch-44100Hz.dts",
@@ -114,11 +136,29 @@ void test_audio()
         auto file = audio.open(SAMPLES_DIR "/" + name, 0);
         run(
             "audio info: " + name,
-            [&] () { test_info(file.get(), info); }
+            [&] () {
+                if (info.error == AudioError::OK) {
+                    test("opened", true, file.has_value());
+                    if (file) {
+                        test_info(file->get(), info);
+                    }
+                } else {
+                    // The file is unusable, the error is reported instead.
+                    test("failed", false, file.has_value());
+                    test("error", info.error, file.error());
+                }
+            }
         );
         run(
             "audio read: " + name,
-            [&] () { test_read(file.get(), info.samples); }
+            [&] () {
+                if (file) {
+                    test_read(file->get(), info.samples, info.samples_tolerance);
+                } else {
+                    // The file could not be opened, there is nothing to read.
+                    test("samples", 0, 0);
+                }
+            }
         );
     }
 }

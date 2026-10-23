@@ -9,6 +9,7 @@ int main()
 
     test_audio();
     test_fft();
+    test_pipeline();
     test_utils();
 
     if (g_passes < g_total) {
