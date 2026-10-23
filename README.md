@@ -52,5 +52,23 @@ Unix packages:
 
 ### Dependencies
 
- * wxWidgets >= 3
- * A recent version of FFmpeg
+ * A C++23 compiler: GCC 13+, Clang 19+ or Visual Studio 2022 17.6+
+   (`std::expected` is missing from Clang 18 and older)
+ * CMake >= 3.25
+ * wxWidgets >= 3.2
+ * FFmpeg >= 5.1 (`libavformat`, `libavcodec`, `libavutil` and `libswresample`)
+
+### Building
+
+Spek is built with CMake, see [INSTALL.md](INSTALL.md) for the details:
+
+    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+    cmake --build build
+
+### Command line interface
+
+The same binary also works without a graphical interface, including the batch
+processing of whole directories:
+
+    spek --cli --input song.flac --output song.png
+    spek --cli --input ~/Music --output spectrograms --recursive --jobs 4
