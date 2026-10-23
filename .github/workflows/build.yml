@@ -113,17 +113,19 @@ jobs:
       # There is no system package manager on Windows, so use vcpkg and cache
       # the built packages: only the first run has to compile wxWidgets and
       # FFmpeg.
-      - name: Cache the vcpkg binary packages (Windows)
+      # Restoring and saving are two steps on purpose: building wxWidgets and
+      # FFmpeg takes about half an hour, and a single cache step would throw
+      # the packages away whenever the job fails.
+
+      # The packages of each triplet are cached separately.
+      - name: Restore the vcpkg binary packages (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
           key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             vcpkg-${{ runner.os }}-${{ matrix.triplet }}-
-          # Building wxWidgets and FFmpeg takes about half an hour, so keep
-          # the packages even when the job fails.
-          save-always: true
 
       - name: Configure (Linux)
         if: runner.os == 'Linux'
@@ -174,7 +176,26 @@ jobs:
       # --config is what the multi-configuration generators need, the
       # single-configuration ones ignore it.
       - name: Build
+        id: build
         run: cmake --build build --config Release
+
+      # TEMPORARY: the logs of a failed job cannot be read from the outside,
+      # so repeat the build and publish the errors as job annotations.
+      - name: Report the build errors
+        if: failure() && steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          cmake --build build --config Release > build.log 2>&1
+          grep -iE "error|fatal" build.log | tr -d '\r' | head -60 > errors.txt
+          mapfile -t lines < errors.txt
+          for ((i = 0; i < ${#lines[@]} && i < 60; i += 6)); do
+              message=""
+              for ((j = i; j < i + 6 && j < ${#lines[@]}; j++)); do
+                  message="${message}${lines[j]}%0A"
+              done
+              echo "::error::${message}"
+          done
+          exit 1
 
       - name: Run the test suite
         run: ctest --test-dir build -C Release --output-on-failure
@@ -218,6 +239,14 @@ jobs:
           Get-ChildItem -Path build\src\Release\*.dll -ErrorAction SilentlyContinue |
             Copy-Item -Destination "${{ matrix.artifact }}\"
           Get-ChildItem "${{ matrix.artifact }}"
+
+      - name: Save the vcpkg binary packages (Windows)
+        if: runner.os == 'Windows' && always()
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Upload the artefacts
         uses: actions/upload-artifact@v4
