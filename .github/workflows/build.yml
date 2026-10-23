@@ -41,7 +41,7 @@ jobs:
 
     # std::expected needs GCC 13 or newer, or Clang 19 or newer with a
     # matching standard library: the Ubuntu image only has Clang 18, which
-    # is too old, so both Linux jobs use GCC.
+    # is too old, so the Linux jobs use GCC, on x86-64 and on aarch64.
     strategy:
       fail-fast: false
       matrix:
@@ -58,6 +58,12 @@ jobs:
             cc: gcc-14
             cxx: g++-14
             artifact: spek-cli-gui-ubuntu-gcc14
+          - os: ubuntu-24.04-arm
+            name: ubuntu-24.04-arm (GCC 13)
+            compiler: g++-13
+            cc: gcc-13
+            cxx: g++-13
+            artifact: spek-cli-gui-linux-aarch64
           - os: macos-latest
             name: macos-latest (Apple Clang)
             cc: clang
@@ -65,9 +71,14 @@ jobs:
             artifact: spek-cli-gui-macos
           - os: windows-latest
             name: windows-latest (MSVC)
-            cc: cl
-            cxx: cl
+            triplet: x64-windows
             artifact: spek-cli-gui-windows
+          # The same Windows build with wxWidgets, FFmpeg and the runtime
+          # linked in statically: a single spek.exe which needs no DLLs.
+          - os: windows-latest
+            name: windows-latest (MSVC, static)
+            triplet: x64-windows-static
+            artifact: spek-cli-gui-windows-static
 
     steps:
       - name: Check out the repository
@@ -107,9 +118,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-
+            vcpkg-${{ runner.os }}-${{ matrix.triplet }}-
           # Building wxWidgets and FFmpeg takes about half an hour, so keep
           # the packages even when the job fails.
           save-always: true
@@ -151,13 +162,13 @@ jobs:
         if: runner.os == 'Windows'
         env:
           VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite"
-          VCPKG_TARGET_TRIPLET: x64-windows
+          VCPKG_TARGET_TRIPLET: ${{ matrix.triplet }}
         # No -G on purpose: CMake picks the newest Visual Studio of the
         # image, which is also what vcpkg builds its packages with.
         run: >
           cmake -B build -S . -A x64
           -DCMAKE_TOOLCHAIN_FILE="$env:SPEK_VCPKG_TOOLCHAIN"
-          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
           -DSPEK_BUILD_TESTS=ON
 
       # --config is what the multi-configuration generators need, the
@@ -179,6 +190,17 @@ jobs:
         run: |
           .\build\src\Release\spek.exe --version
           .\build\src\Release\spek.exe --cli --input tests/samples --output build/spectrograms --width 100
+
+      # vcpkg copies the DLLs of its packages next to the binary, so there
+      # must not be any when everything is linked statically.
+      - name: Check that the static binary is self-contained
+        if: matrix.triplet == 'x64-windows-static'
+        run: |
+          $dlls = Get-ChildItem -Path build\src\Release\*.dll -ErrorAction SilentlyContinue
+          if ($dlls) {
+              Write-Error "the static build is not static: $($dlls.Name -join ', ')"
+              exit 1
+          }
 
       # ------------------------------------------------------------ artefacts
       - name: Collect the binaries (Linux, macOS)
