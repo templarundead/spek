@@ -2,6 +2,7 @@
 #include <wx/iconbndl.h>
 
 #include "spek-artwork.h"
+#include "spek-config.h"
 
 class SpekArtProvider : public wxArtProvider
 {

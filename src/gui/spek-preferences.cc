@@ -1,3 +1,23 @@
+// Copyright (C) 2010-2013 Alexander Kojevnikov and contributors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#include "spek-config.h"
+
+#include <memory>
+#include <utility>
+
 #include <wx/string.h>
 
 #include "spek-platform.h"
@@ -12,10 +32,7 @@ SpekPreferences& SpekPreferences::get()
 
 void SpekPreferences::init()
 {
-    if (this->locale) {
-        delete this->locale;
-    }
-    this->locale = new wxLocale();
+    this->locale = std::make_unique<wxLocale>();
 
     int lang = wxLANGUAGE_DEFAULT;
     wxString code = this->get_language();
@@ -26,21 +43,22 @@ void SpekPreferences::init()
         }
     }
     this->locale->Init(lang);
-    this->locale->AddCatalog(GETTEXT_PACKAGE);
+    this->locale->AddCatalog(SPEK_GETTEXT_PACKAGE);
 }
 
-SpekPreferences::SpekPreferences() : locale(NULL)
-{
-    wxString path = spek_platform_config_path("spek");
-    this->config = new wxFileConfig(
+SpekPreferences::SpekPreferences() :
+    config(std::make_unique<wxFileConfig>(
         wxEmptyString,
         wxEmptyString,
-        path,
+        spek_platform_config_path("spek"),
         wxEmptyString,
         wxCONFIG_USE_LOCAL_FILE,
         wxConvUTF8
-    );
+    ))
+{
 }
+
+SpekPreferences::~SpekPreferences() = default;
 
 bool SpekPreferences::get_check_update()
 {

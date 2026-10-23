@@ -1,3 +1,8 @@
+#include "spek-config.h"
+
+#include <string>
+#include <thread>
+
 #include <wx/aboutdlg.h>
 #include <wx/artprov.h>
 #include <wx/dnd.h>
@@ -5,20 +10,18 @@
 #include <wx/protocol/http.h>
 #include <wx/sstream.h>
 
-// WX on WIN doesn't like it when pthread.h is included first.
-#include <pthread.h>
-
-#include <spek-utils.h>
+#include "spek-utils.h"
 
 #include "spek-artwork.h"
+#include "spek-platform.h"
 #include "spek-preferences-dialog.h"
 #include "spek-preferences.h"
 #include "spek-spectrogram.h"
 
 #include "spek-window.h"
 
-DECLARE_EVENT_TYPE(SPEK_NOTIFY_EVENT, -1)
-DEFINE_EVENT_TYPE(SPEK_NOTIFY_EVENT)
+// Posted by the update checker thread once a new version is available.
+wxDEFINE_EVENT(SPEK_NOTIFY_EVENT, wxCommandEvent);
 
 BEGIN_EVENT_TABLE(SpekWindow, wxFrame)
     EVT_MENU(wxID_OPEN, SpekWindow::on_open)
@@ -31,7 +34,7 @@ BEGIN_EVENT_TABLE(SpekWindow, wxFrame)
 END_EVENT_TABLE()
 
 // Forward declarations.
-static void * check_version(void *);
+static void check_version(SpekWindow *self);
 
 class SpekDropTarget : public wxFileDropTarget
 {
@@ -148,8 +151,12 @@ SpekWindow::SpekWindow(const wxString& path) :
 
     SetSizer(sizer);
 
-    pthread_t thread;
-    pthread_create(&thread, NULL, &check_version, this);
+    // Draw the window decorations in dark mode when the OS uses it.
+    spek_platform_enable_dark_mode(this);
+
+    // The update check runs in the background and posts an event when it
+    // finds a new version.
+    std::thread(check_version, this).detach();
 }
 
 void SpekWindow::open(const wxString& path)
@@ -166,40 +173,6 @@ void SpekWindow::open(const wxString& path)
     }
 }
 
-// TODO: s/audio/media/
-static const char *audio_extensions[] = {
-    "3gp",
-    "aac",
-    "aif",
-    "aifc",
-    "aiff",
-    "amr",
-    "awb",
-    "ape",
-    "au",
-    "dts",
-    "flac",
-    "flv",
-    "gsm",
-    "m4a",
-    "m4p",
-    "mp3",
-    "mp4",
-    "mp+",
-    "mpc",
-    "mpp",
-    "oga",
-    "ogg",
-    "opus",
-    "ra",
-    "ram",
-    "snd",
-    "wav",
-    "wma",
-    "wv",
-    NULL
-};
-
 void SpekWindow::on_open(wxCommandEvent&)
 {
     static wxString filters = wxEmptyString;
@@ -211,12 +184,14 @@ void SpekWindow::on_open(wxCommandEvent&)
         filters += "|*.*|";
         filters += _("Audio files");
         filters += "|";
-        for (int i = 0; audio_extensions[i]; ++i) {
-            if (i) {
+        bool first = true;
+        for (const auto& extension : spek_audio_extensions()) {
+            if (!first) {
                 filters += ";";
             }
             filters += "*.";
-            filters += wxString::FromAscii(audio_extensions[i]);
+            filters += wxString::FromUTF8(std::string(extension).c_str());
+            first = false;
         }
         filters.Shrink();
     }
@@ -289,7 +264,7 @@ void SpekWindow::on_preferences(wxCommandEvent&)
 void SpekWindow::on_help(wxCommandEvent&)
 {
     wxLaunchDefaultBrowser(
-        wxString::Format("http://help.spek.cc/man-%s.html", PACKAGE_VERSION)
+        wxString::Format("http://help.spek.cc/man-%s.html", SPEK_VERSION)
     );
 }
 
@@ -318,7 +293,7 @@ void SpekWindow::on_about(wxCommandEvent&)
         info.AddTranslator(translator);
     }
     info.SetName("Spek");
-    info.SetVersion(PACKAGE_VERSION);
+    info.SetVersion(SPEK_VERSION);
     info.SetCopyright(_("Copyright (c) 2010-2013 Alexander Kojevnikov and contributors"));
     info.SetDescription(this->description);
 #ifdef OS_UNIX
@@ -346,12 +321,12 @@ void SpekWindow::on_close(wxCommandEvent& event)
     self->Layout();
 }
 
-static void * check_version(void *p)
+static void check_version(SpekWindow *self)
 {
     // Does the user want to check for updates?
     SpekPreferences& prefs = SpekPreferences::get();
     if (!prefs.get_check_update()) {
-        return NULL;
+        return;
     }
 
     // Calculate the number of days since 0001-01-01, borrowed from GLib.
@@ -366,7 +341,7 @@ static void * check_version(void *p)
     // When was the last update?
     int diff = days - prefs.get_last_update();
     if (diff < 7) {
-        return NULL;
+        return;
     }
 
     // Get the version number.
@@ -383,11 +358,10 @@ static void * check_version(void *p)
     }
 
     if (version.IsEmpty()) {
-        return NULL;
+        return;
     }
 
-    if (1 == spek_vercmp(version.mb_str(wxConvLibc), PACKAGE_VERSION)) {
-        SpekWindow *self = (SpekWindow *)p;
+    if (1 == spek_vercmp(version.mb_str(wxConvLibc).data(), SPEK_VERSION)) {
         wxCommandEvent event(SPEK_NOTIFY_EVENT, -1);
         event.SetEventObject(self);
         wxPostEvent(self, event);
@@ -396,5 +370,4 @@ static void * check_version(void *p)
     // Update the preferences.
     prefs.set_check_update(true);
     prefs.set_last_update(days);
-    return NULL;
 }
