@@ -1,6 +1,9 @@
+# List of source files which contain translatable strings.
 data/spek.desktop.in
-src/spek-pipeline.cc
-src/spek-preferences-dialog.cc
-src/spek-spectrogram.cc
-src/spek-window.cc
-src/spek.cc
+src/cli/spek-cli.cc
+src/core/spek-audio.cc
+src/core/spek-pipeline.cc
+src/gui/spek-gui.cc
+src/gui/spek-preferences-dialog.cc
+src/gui/spek-spectrogram.cc
+src/gui/spek-window.cc

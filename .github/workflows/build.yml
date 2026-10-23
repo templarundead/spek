@@ -1,0 +1,205 @@
+# Copyright (C) 2010-2013 Alexander Kojevnikov and contributors
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Builds Spek on Linux, macOS and Windows and uploads the resulting
+# binaries (which double as the command line tool and as the graphical
+# application) as workflow artefacts.
+#
+# The dependencies come from the package manager of the platform where
+# possible and from vcpkg on Windows, where there is none. vcpkg can be
+# used everywhere: see vcpkg.json and INSTALL.md.
+
+name: Build
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Don't let vcpkg phone home.
+  VCPKG_DISABLE_METRICS: 1
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    # std::expected needs GCC 13 or newer, or Clang 19 or newer with a
+    # matching standard library: the Ubuntu image only has Clang 18, which
+    # is too old, so both Linux jobs use GCC.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: ubuntu-latest (GCC 13)
+            compiler: g++-13
+            cc: gcc-13
+            cxx: g++-13
+            artifact: spek-cli-gui-ubuntu
+          - os: ubuntu-latest
+            name: ubuntu-latest (GCC 14)
+            compiler: g++-14
+            cc: gcc-14
+            cxx: g++-14
+            artifact: spek-cli-gui-ubuntu-gcc14
+          - os: macos-latest
+            name: macos-latest (Apple Clang)
+            cc: clang
+            cxx: clang++
+            artifact: spek-cli-gui-macos
+          - os: windows-latest
+            name: windows-latest (MSVC)
+            cc: cl
+            cxx: cl
+            artifact: spek-cli-gui-windows
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- Linux
+      - name: Install the dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            gettext \
+            pkg-config \
+            zlib1g-dev \
+            "${{ matrix.compiler }}" \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswresample-dev \
+            libwxgtk3.2-dev
+
+      # ---------------------------------------------------------------- macOS
+      - name: Install the dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install cmake ninja pkg-config ffmpeg wxwidgets gettext
+
+      # -------------------------------------------------------------- Windows
+      # There is no system package manager on Windows, so use vcpkg and cache
+      # the built packages: only the first run has to compile wxWidgets and
+      # FFmpeg.
+      - name: Cache the vcpkg binary packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+          # Building wxWidgets and FFmpeg takes about half an hour, so keep
+          # the packages even when the job fails.
+          save-always: true
+
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -B build -S . -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DSPEK_BUILD_TESTS=ON
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -B build -S . -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_PREFIX_PATH="$(brew --prefix);$(brew --prefix)/opt/gettext"
+          -DSPEK_BUILD_TESTS=ON
+
+      # The runner image ships vcpkg, but its location is only announced
+      # through an environment variable.
+      - name: Prepare the build environment (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $vcpkg = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $vcpkg) { $vcpkg = $env:VCPKG_ROOT }
+          if (-not $vcpkg) { throw "Cannot find vcpkg on this runner" }
+          $toolchain = Join-Path $vcpkg 'scripts/buildsystems/vcpkg.cmake'
+          if (-not (Test-Path $toolchain)) { throw "Cannot find $toolchain" }
+          Add-Content -Path $env:GITHUB_ENV -Value "SPEK_VCPKG_TOOLCHAIN=$toolchain"
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        env:
+          VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite"
+          VCPKG_TARGET_TRIPLET: x64-windows
+        # No -G on purpose: CMake picks the newest Visual Studio of the
+        # image, which is also what vcpkg builds its packages with.
+        run: >
+          cmake -B build -S . -A x64
+          -DCMAKE_TOOLCHAIN_FILE="$env:SPEK_VCPKG_TOOLCHAIN"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DSPEK_BUILD_TESTS=ON
+
+      # --config is what the multi-configuration generators need, the
+      # single-configuration ones ignore it.
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Run the test suite
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Smoke test the command line interface (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: |
+          ./build/src/spek --version
+          ./build/src/spek --cli --input tests/samples --output build/spectrograms --width 100
+
+      - name: Smoke test the command line interface (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .\build\src\Release\spek.exe --version
+          .\build\src\Release\spek.exe --cli --input tests/samples --output build/spectrograms --width 100
+
+      # ------------------------------------------------------------ artefacts
+      - name: Collect the binaries (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p "${{ matrix.artifact }}"
+          cp build/src/spek "${{ matrix.artifact }}/"
+          ls -la "${{ matrix.artifact }}"
+
+      - name: Collect the binaries (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ matrix.artifact }}"
+          Copy-Item build\src\Release\spek.exe -Destination "${{ matrix.artifact }}\"
+          Get-ChildItem -Path build\src\Release\*.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "${{ matrix.artifact }}\"
+          Get-ChildItem "${{ matrix.artifact }}"
+
+      - name: Upload the artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
