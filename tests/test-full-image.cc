@@ -33,6 +33,22 @@ bool contains_color(const SpekImage& image, uint32_t color)
     return false;
 }
 
+bool has_antialiased_title_pixel(const SpekImage& image)
+{
+    for (int y = 0; y < std::min(image.height(), 30); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const uint32_t color = image.pixel(x, y);
+            const uint32_t red = (color >> 16) & 0xFF;
+            const uint32_t green = (color >> 8) & 0xFF;
+            const uint32_t blue = color & 0xFF;
+            if (red == green && green == blue && red > 0x20 && red < 0xF0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void test_ticks()
 {
     constexpr std::array factors{1, 2, 5, 10, 0};
@@ -65,6 +81,8 @@ void test_composition()
     test("full image has horizontal rulers", true, full.width() > raw.width());
     test("full image has vertical metadata", true, full.height() > raw.height());
     test("full image keeps the spectrogram", true, contains_color(full, color));
+    test("full image clears a dark background", true, full.pixel(0, 0) == 0x202020);
+    test("full image uses anti-aliased labels", true, has_antialiased_title_pixel(full));
 
     info.file_name = std::string(160, 'x') + ".wav";
     const SpekImage wide = spek_render_full_image(raw, info);

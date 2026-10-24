@@ -71,6 +71,14 @@ Artist:
 
 * Olga Vasylevska
 
+## Embedded components
+
+* The full-image renderer embeds Spek Sans, a subset of
+  [Noto Sans](https://github.com/googlefonts/noto-fonts), distributed under the
+  SIL Open Font License (see `lic/Noto`).
+* Text is rasterized by [stb_truetype](https://github.com/nothings/stb), which
+  is available under the MIT license or public domain (see `lic/stb`).
+
 ## Binary packages
 
 Official binary packages for Windows and OS X in addition to Spek include the

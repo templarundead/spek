@@ -60,6 +60,11 @@ Or install it with:
  * [gettext](https://www.gnu.org/software/gettext/) (optional, for the
    translations)
 
+The `--full-image` renderer embeds its anti-aliased Spek Sans font (a Noto
+Sans subset) and does not require DejaVu, Liberation, Fontconfig or an X server
+on a headless machine. Its licence is included in `lic/Noto`; the embedded
+`stb_truetype` rasterizer is covered by `lic/stb`.
+
 On Debian/Ubuntu:
 
     sudo apt-get install cmake libwxgtk3.2-dev libavcodec-dev libavformat-dev \

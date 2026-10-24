@@ -24,7 +24,8 @@ struct SpekFullImageInfo
 };
 
 // Adds the same file information, palette and time/frequency/density rulers
-// as the GUI around a rendered spectrogram. This renderer deliberately uses
-// only SpekImage, not wxMemoryDC: wxGTK would otherwise require a display
-// server even for an off-screen command-line render.
+// as the GUI around a rendered spectrogram. The renderer uses an embedded
+// anti-aliased TrueType font and only SpekImage, not wxMemoryDC: this keeps
+// off-screen command-line rendering independent of wxGTK, Fontconfig and a
+// display server.
 SpekImage spek_render_full_image(const SpekImage& spectrogram, const SpekFullImageInfo& info);

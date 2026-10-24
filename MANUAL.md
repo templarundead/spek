@@ -68,7 +68,7 @@ Spek - Acoustic Spectrum Analyser
 :   Do not print the progress information.
 
 `--full-image`
-:   Include the file name, stream metadata, time and frequency rulers, spectral-density scale and palette in the saved image. The option works without a display server.
+:   Include the file name, stream metadata, time and frequency rulers, spectral-density scale and palette in the saved image. The option works without a display server. The complete canvas is cleared to a dark background and labels use an embedded anti-aliased TrueType font, so no system font installation or Fontconfig is required.
 
 # BATCH PROCESSING
 

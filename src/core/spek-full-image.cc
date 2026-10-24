@@ -13,8 +13,28 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
+
+// Keep the rasterizer private to this translation unit. It works on the
+// embedded, trusted font and does not need a GUI, Fontconfig or a display.
+#define STBTT_STATIC
+#define STB_TRUETYPE_IMPLEMENTATION
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4505)
+#endif
+#include "third_party/stb_truetype.h"
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #include "spek-ruler-ticks.h"
 
@@ -23,11 +43,13 @@
 namespace
 {
 
-#include "spek-font8x8.inc"
+#include "spek-font-data.inc"
 
-constexpr uint32_t BACKGROUND = 0xFFFFFF;
-constexpr uint32_t FOREGROUND = 0x000000;
-constexpr int FONT_SIZE = 8;
+constexpr uint32_t BACKGROUND = 0x202020;
+constexpr uint32_t FOREGROUND = 0xF0F0F0;
+constexpr int FONT_LARGE = 20;
+constexpr int FONT_NORMAL = 13;
+constexpr int FONT_SMALL = 12;
 
 struct Character
 {
@@ -81,37 +103,102 @@ Character next_character(std::string_view text)
     return {value, length};
 }
 
-unsigned char glyph_for(uint32_t codepoint)
+class Font
 {
-    // The embedded font covers Basic Latin. Keep the layout deterministic
-    // for every UTF-8 input and use a visible replacement for other scripts.
-    if (codepoint == 0xA0) {
-        codepoint = ' ';
-    }
-    if (codepoint > 0x7F) {
-        codepoint = '?';
-    }
-    return static_cast<unsigned char>(codepoint);
-}
-
-int text_width(std::string_view text, int scale = 1)
-{
-    long long width = 0;
-    while (!text.empty()) {
-        const Character character = next_character(text);
-        text.remove_prefix(character.length);
-        width += FONT_SIZE * scale;
-        if (width >= std::numeric_limits<int>::max()) {
-            return std::numeric_limits<int>::max();
+public:
+    Font()
+    {
+        const int offset = stbtt_GetFontOffsetForIndex(spek_font_data, 0);
+        if (offset < 0 || !stbtt_InitFont(&this->info, spek_font_data, offset)) {
+            return;
         }
+        stbtt_GetFontVMetrics(&this->info, &this->ascent, &this->descent, &this->line_gap);
+        this->ready = true;
     }
-    return static_cast<int>(width);
-}
+
+    bool valid() const { return this->ready; }
+
+    float scale(int pixel_height) const
+    {
+        return stbtt_ScaleForPixelHeight(&this->info, static_cast<float>(pixel_height));
+    }
+
+    int line_height(int pixel_height) const
+    {
+        if (!this->ready) {
+            return pixel_height;
+        }
+        return std::max(1, static_cast<int>(std::ceil(
+            (this->ascent - this->descent + this->line_gap) * this->scale(pixel_height)
+        )));
+    }
+
+    uint32_t supported(uint32_t codepoint) const
+    {
+        if (codepoint == 0xA0 || codepoint == '\t') {
+            codepoint = ' ';
+        }
+        if (codepoint != '?'
+            && stbtt_FindGlyphIndex(&this->info, static_cast<int>(codepoint)) == 0) {
+            return '?';
+        }
+        return codepoint;
+    }
+
+    int width(std::string_view text, int pixel_height = FONT_NORMAL) const
+    {
+        if (!this->ready) {
+            return 0;
+        }
+        const float scale = this->scale(pixel_height);
+        double result = 0.0;
+        uint32_t previous = 0;
+        while (!text.empty()) {
+            const Character character = next_character(text);
+            text.remove_prefix(character.length);
+            const uint32_t codepoint = this->supported(character.value);
+            if (previous != 0) {
+                result += stbtt_GetCodepointKernAdvance(
+                    &this->info, static_cast<int>(previous), static_cast<int>(codepoint)
+                ) * scale;
+            }
+            int advance = 0;
+            int left_side_bearing = 0;
+            stbtt_GetCodepointHMetrics(
+                &this->info, static_cast<int>(codepoint), &advance, &left_side_bearing
+            );
+            result += advance * scale;
+            previous = codepoint;
+            if (result >= std::numeric_limits<int>::max()) {
+                return std::numeric_limits<int>::max();
+            }
+        }
+        return std::max(0, static_cast<int>(std::ceil(result)));
+    }
+
+    stbtt_fontinfo info{};
+    int ascent = 0;
+    int descent = 0;
+    int line_gap = 0;
+
+private:
+    bool ready = false;
+};
 
 class Canvas
 {
 public:
-    explicit Canvas(SpekImage& image) : image(image) {}
+    Canvas(SpekImage& image, const Font& font) : image(image), font(font) {}
+
+    int text_width(std::string_view value, int pixel_height = FONT_NORMAL) const
+    {
+        return this->font.width(value, pixel_height);
+    }
+
+    int line_height(int pixel_height) const
+    {
+        return this->font.line_height(pixel_height);
+    }
 
     void fill_rect(int x, int y, int width, int height, uint32_t color = FOREGROUND)
     {
@@ -131,26 +218,69 @@ public:
         }
     }
 
-    void text(int x, int y, std::string_view value, int scale = 1, bool bold = false)
+    void text(int x, int y, std::string_view value, int pixel_height = FONT_NORMAL, bool bold = false)
     {
+        if (!this->font.valid()) {
+            return;
+        }
+
+        const float scale = this->font.scale(pixel_height);
+        const int baseline = y + static_cast<int>(std::lround(this->font.ascent * scale));
+        double pen_x = x;
+        uint32_t previous = 0;
         while (!value.empty()) {
             const Character character = next_character(value);
             value.remove_prefix(character.length);
-            const auto glyph = glyph_for(character.value);
-            for (int row = 0; row < FONT_SIZE; ++row) {
-                const unsigned char bits = font8x8_basic[glyph][row];
-                for (int column = 0; column < FONT_SIZE; ++column) {
-                    if ((bits & (1U << column)) != 0) {
-                        fill_rect(
-                            x + column * scale,
-                            y + row * scale,
-                            scale + (bold ? 1 : 0),
-                            scale
-                        );
+            const uint32_t codepoint = this->font.supported(character.value);
+            if (previous != 0) {
+                pen_x += stbtt_GetCodepointKernAdvance(
+                    &this->font.info, static_cast<int>(previous), static_cast<int>(codepoint)
+                ) * scale;
+            }
+
+            int x0 = 0;
+            int y0 = 0;
+            int x1 = 0;
+            int y1 = 0;
+            stbtt_GetCodepointBitmapBox(
+                &this->font.info, static_cast<int>(codepoint), scale, scale, &x0, &y0, &x1, &y1
+            );
+            const int width = x1 - x0;
+            const int height = y1 - y0;
+            if (width > 0 && height > 0) {
+                std::vector<unsigned char> alpha(static_cast<std::size_t>(width) * height);
+                stbtt_MakeCodepointBitmap(
+                    &this->font.info,
+                    alpha.data(),
+                    width,
+                    height,
+                    width,
+                    scale,
+                    scale,
+                    static_cast<int>(codepoint)
+                );
+                const int origin_x = static_cast<int>(std::lround(pen_x)) + x0;
+                const int origin_y = baseline + y0;
+                for (int row = 0; row < height; ++row) {
+                    for (int column = 0; column < width; ++column) {
+                        const unsigned char coverage = alpha[
+                            static_cast<std::size_t>(row) * width + column
+                        ];
+                        this->blend_pixel(origin_x + column, origin_y + row, coverage);
+                        if (bold) {
+                            this->blend_pixel(origin_x + column + 1, origin_y + row, coverage);
+                        }
                     }
                 }
             }
-            x += FONT_SIZE * scale;
+
+            int advance = 0;
+            int left_side_bearing = 0;
+            stbtt_GetCodepointHMetrics(
+                &this->font.info, static_cast<int>(codepoint), &advance, &left_side_bearing
+            );
+            pen_x += advance * scale;
+            previous = codepoint;
         }
     }
 
@@ -166,7 +296,26 @@ public:
     }
 
 private:
+    void blend_pixel(int x, int y, unsigned char coverage)
+    {
+        if (coverage == 0 || x < 0 || y < 0 || x >= this->image.width() || y >= this->image.height()) {
+            return;
+        }
+        const uint32_t destination = this->image.pixel(x, y);
+        const unsigned int inverse = 255 - coverage;
+        const auto channel = [coverage, inverse](uint32_t foreground, uint32_t background, int shift) {
+            const unsigned int fg = (foreground >> shift) & 0xFF;
+            const unsigned int bg = (background >> shift) & 0xFF;
+            return static_cast<uint32_t>((fg * coverage + bg * inverse + 127) / 255);
+        };
+        const uint32_t color = (channel(FOREGROUND, destination, 16) << 16)
+            | (channel(FOREGROUND, destination, 8) << 8)
+            | channel(FOREGROUND, destination, 0);
+        this->image.set_pixel(x, y, color);
+    }
+
     SpekImage& image;
+    const Font& font;
 };
 
 enum class RulerPosition
@@ -214,7 +363,9 @@ void draw_ruler(
 )
 {
     const bool horizontal = position == RulerPosition::BOTTOM;
-    const int extent = horizontal ? text_width(sample_label) : FONT_SIZE;
+    const int extent = horizontal
+        ? canvas.text_width(sample_label, FONT_SMALL)
+        : canvas.line_height(FONT_SMALL);
     const auto ticks = spek_ruler_ticks(
         factors, min_units, max_units, scale, spacing, extent
     );
@@ -223,16 +374,20 @@ void draw_ruler(
         const std::string label = formatter(tick);
         const int value = horizontal ? tick : max_units + min_units - tick;
         const int p = static_cast<int>(offset + scale * (value - min_units));
-        const int width = text_width(label);
+        const int width = canvas.text_width(label, FONT_SMALL);
 
         if (position == RulerPosition::BOTTOM) {
-            canvas.text(x + p - width / 2, y + gap, label);
+            canvas.text(x + p - width / 2, y + gap, label, FONT_SMALL);
             canvas.fill_rect(x + p, y, 1, tick_length);
         } else if (position == RulerPosition::RIGHT) {
-            canvas.text(x + gap, y + p - FONT_SIZE / 2, label);
+            canvas.text(
+                x + gap, y + p - canvas.line_height(FONT_SMALL) / 2, label, FONT_SMALL
+            );
             canvas.fill_rect(x, y + p, tick_length, 1);
         } else {
-            canvas.text(x - width - gap, y + p - FONT_SIZE / 2, label);
+            canvas.text(
+                x - width - gap, y + p - canvas.line_height(FONT_SMALL) / 2, label, FONT_SMALL
+            );
             canvas.fill_rect(x - tick_length, y + p, tick_length, 1);
         }
     }
@@ -272,17 +427,22 @@ SpekImage spek_render_full_image(const SpekImage& spectrogram, const SpekFullIma
         return {};
     }
 
+    const Font font;
+    if (!font.valid()) {
+        return {};
+    }
+
     constexpr int gap = 10;
     constexpr int ruler = 10;
     constexpr int tick = 4;
-    constexpr int large_height = FONT_SIZE * 2;
-    constexpr int normal_height = FONT_SIZE;
-    constexpr int small_height = FONT_SIZE;
+    const int large_height = font.line_height(FONT_LARGE);
+    const int normal_height = font.line_height(FONT_NORMAL);
+    const int small_height = font.line_height(FONT_SMALL);
 
-    const int frequency_width = text_width("000 kHz");
-    const int density_width = text_width("-000 dB");
+    const int frequency_width = font.width("000 kHz", FONT_SMALL);
+    const int density_width = font.width("-000 dB", FONT_SMALL);
     const std::string package_name = std::string(SPEK_DISPLAY_NAME) + " ";
-    const int version_width = text_width(package_name) + text_width(SPEK_VERSION);
+    const int version_width = font.width(package_name) + font.width(SPEK_VERSION);
 
     const int lpad = gap + frequency_width + gap;
     const int rpad = std::max(
@@ -295,23 +455,25 @@ SpekImage spek_render_full_image(const SpekImage& spectrogram, const SpekFullIma
     // Grow the plot instead of ellipsising a long file name or description.
     const int plot_width = std::max({
         spectrogram.width(),
-        text_width(info.file_name, 2),
-        text_width(info.description),
+        font.width(info.file_name, FONT_LARGE),
+        font.width(info.description),
     });
     const int plot_height = spectrogram.height();
 
     SpekImage result(lpad + plot_width + rpad, tpad + plot_height + bpad);
-    Canvas canvas(result);
+    Canvas canvas(result, font);
+    // Clear the complete backing store before drawing any rulers or labels so
+    // no uninitialized or stale stripes can remain around the plot.
     canvas.fill_rect(0, 0, result.width(), result.height(), BACKGROUND);
 
     const int name_y = gap;
     const int desc_y = name_y + large_height + gap;
-    canvas.text(lpad, name_y, info.file_name, 2, true);
+    canvas.text(lpad, name_y, info.file_name, FONT_LARGE, true);
     canvas.text(lpad, desc_y, info.description);
 
     const int package_x = result.width() - rpad + gap;
-    canvas.text(package_x, name_y, SPEK_DISPLAY_NAME, 1, true);
-    canvas.text(package_x + text_width(package_name), desc_y, SPEK_VERSION);
+    canvas.text(package_x, name_y, SPEK_DISPLAY_NAME, FONT_NORMAL, true);
+    canvas.text(package_x + font.width(package_name), desc_y, SPEK_VERSION);
 
     draw_scaled(canvas, spectrogram, lpad, tpad, plot_width, plot_height);
 

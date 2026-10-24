@@ -38,6 +38,9 @@ public:
     int width() const { return this->width_; }
     int height() const { return this->height_; }
 
+    // Gets the pixel at (x, y), which is 0xRRGGBB. Out-of-bounds pixels are black.
+    uint32_t pixel(int x, int y) const;
+
     // Sets the pixel at (x, y) to `rgb`, which is 0xRRGGBB.
     void set_pixel(int x, int y, uint32_t rgb);
 

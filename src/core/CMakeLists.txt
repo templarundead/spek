@@ -20,8 +20,9 @@ add_library(spek-core STATIC
     spek-audio.h
     spek-fft.cc
     spek-fft.h
-    spek-font8x8.inc
+    spek-font-data.inc
     spek-full-image.cc
+    third_party/stb_truetype.h
     spek-full-image.h
     spek-i18n.cc
     spek-i18n.h
