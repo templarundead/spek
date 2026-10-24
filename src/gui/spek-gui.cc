@@ -41,15 +41,6 @@ extern "C" {
 namespace
 {
 
-#if defined(OS_UNIX) && SPEK_STATIC_LINK && defined(__GNUC__)
-// This must also precede ordinary static constructors: some statically linked
-// GTK/epoxy combinations probe GLX before wxEntry() is reached.
-__attribute__((constructor(102))) void disable_static_gdk_gl_early()
-{
-    setenv("GDK_GL", "disable", 1);
-}
-#endif
-
 class SpekApp : public wxApp
 {
 public:
