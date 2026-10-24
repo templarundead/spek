@@ -105,6 +105,7 @@ jobs:
             automake \
             bison \
             cmake \
+            gdb \
             gettext \
             gperf \
             libegl1-mesa-dev \
@@ -131,6 +132,9 @@ jobs:
             nasm \
             ninja-build \
             pkg-config \
+            xauth \
+            xdotool \
+            xvfb \
             "${{ matrix.compiler }}"
 
       # ---------------------------------------------------------------- macOS
@@ -238,7 +242,7 @@ jobs:
           if [[ "${{ steps.build.outcome }}" == "failure" ]]; then
             cmake --build build --config Release > build.log 2>&1 || true
           fi
-          cat configure.log build.log 2>/dev/null > build-failure.log || true
+          cat configure.log build.log gui-smoke.log gui-gdb.log 2>/dev/null > build-failure.log || true
           if [[ ! -s build-failure.log ]]; then
             echo "The job failed before producing a build log." > build-failure.log
           fi
@@ -293,6 +297,30 @@ jobs:
           .\build\src\Release\spek.exe --version
           .\build\src\Release\spek.exe --cli --input tests/samples --output build/spectrograms --width 100
 
+      - name: Smoke test the graphical interface (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=5s 15s \
+            xvfb-run -a ./build/src/spek tests/samples/2ch-44100Hz-16bps.m4a \
+            > gui-smoke.log 2>&1
+          status=$?
+          set -e
+          cat gui-smoke.log
+          # Timeout means that the GUI stayed open. Any early exit, and in
+          # particular SIGSEGV, is a failure; get a backtrace for the log.
+          if [[ $status -ne 124 ]]; then
+            echo "The Linux GUI exited prematurely with status $status" >&2
+            set +e
+            timeout --signal=TERM --kill-after=5s 20s \
+              xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt" \
+              --args ./build/src/spek tests/samples/2ch-44100Hz-16bps.m4a \
+              > gui-gdb.log 2>&1
+            set -e
+            cat gui-gdb.log
+            exit 1
+          fi
+
       # Exercise the other entry point as well: without --cli the same
       # executable must create its wxWidgets window instead of exiting after
       # processing command-line options. This also catches a GUI accidentally
@@ -300,7 +328,10 @@ jobs:
       - name: Smoke test the graphical interface (Windows)
         if: runner.os == 'Windows'
         run: |
-          $process = Start-Process -FilePath .\build\src\Release\spek.exe -PassThru
+          $sample = Join-Path (Resolve-Path build) "sample audio.m4a"
+          Copy-Item tests\samples\2ch-44100Hz-16bps.m4a -Destination $sample
+          $arguments = '"{0}"' -f $sample
+          $process = Start-Process -FilePath .\build\src\Release\spek.exe -ArgumentList $arguments -PassThru
           try {
               $shown = $false
               for ($i = 0; $i -lt 30; ++$i) {
@@ -309,13 +340,14 @@ jobs:
                   if ($process.HasExited) {
                       throw "The GUI exited prematurely with code $($process.ExitCode)"
                   }
-                  if ($process.MainWindowHandle -ne 0) {
+                  if ($process.MainWindowHandle -ne 0 -and
+                      $process.MainWindowTitle -like '*sample audio.m4a*') {
                       $shown = $true
                       break
                   }
               }
               if (-not $shown) {
-                  throw "The GUI did not create a window within 15 seconds"
+                  throw "The GUI did not open the audio file within 15 seconds"
               }
           } finally {
               if (-not $process.HasExited) {

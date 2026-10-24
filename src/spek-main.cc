@@ -18,6 +18,10 @@
 #include "spek-cli.h"
 #include "spek-i18n.h"
 
+#ifdef OS_WIN
+#include <windows.h>
+#endif
+
 #if SPEK_BUILD_GUI
 #include "spek-gui.h"
 #endif
@@ -30,6 +34,13 @@ int main(int argc, char **argv)
 
 #if SPEK_BUILD_GUI
     if (!spek::wants_cli(argc, argv)) {
+#ifdef OS_WIN
+        // Keep the console for command-line use, but don't leave a console
+        // window beside the GUI when the executable is started normally.
+        // If the user has a terminal open already, this only detaches Spek
+        // from it and never closes the terminal itself.
+        FreeConsole();
+#endif
         // Hand the command line over to wxWidgets, the graphical interface
         // registers its own translator so that the core strings are
         // translated through wx as well.
