@@ -7,6 +7,10 @@ pkg-config interface. That is not sufficient for an executable linked with
 
 - `triplets/x64-linux-static.cmake` and `arm64-linux-static.cmake` enable
   vcpkg's X11 ports with `X_VCPKG_FORCE_VCPKG_X_LIBRARIES`.
+- `ports/zlib` is an empty compatibility alias for `zlib-ng`, not the classic
+  zlib implementation. All vcpkg triplets enable `ZLIB_COMPAT` for `zlib-ng`,
+  so wxWidgets, libpng and Spek itself use the same optimized `libz` API.
+  The Windows triplets mirror the stock settings while adding this mapping.
 - `ports/wxwidgets` is the 3.3.3 port with static GTK transitive dependencies
   selected when `BUILD_SHARED_LIBS=OFF`. It also provides native dark-mode
   support on Windows and the upstream fix for converter/standard-path use

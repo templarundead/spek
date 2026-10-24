@@ -129,6 +129,7 @@ jobs:
             libxrender-dev \
             libxtst-dev \
             linux-libc-dev \
+            mold \
             nasm \
             ninja-build \
             pkg-config \

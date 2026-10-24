@@ -14,3 +14,9 @@ set(X_VCPKG_BUILD_GNU_LIBICONV 1)
 # make pkg-config select the build host's shared libraries, which cannot be
 # used in the self-contained executable.
 set(X_VCPKG_FORCE_VCPKG_X_LIBRARIES ON)
+
+# Install zlib-ng with zlib's API, library names and CMake package so the
+# empty zlib overlay can forward wxWidgets, libpng and Spek to zlib-ng.
+if(PORT STREQUAL "zlib-ng")
+    set(ZLIB_COMPAT ON)
+endif()
