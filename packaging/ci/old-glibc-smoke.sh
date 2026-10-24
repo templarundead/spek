@@ -4,7 +4,7 @@
 
 set +e
 export SPEK_TRACE_STARTUP=1
-./build/src/spek > old-glibc-program.log 2>&1 &
+./build/src/spek tests/samples/2ch-44100Hz-16bps.m4a > old-glibc-program.log 2>&1 &
 pid=$!
 
 premature=0
@@ -42,7 +42,7 @@ timeout --signal=TERM --kill-after=5s 25s \
     -ex 'set pagination off' \
     -ex run \
     -ex 'thread apply all bt' \
-    --args ./build/src/spek
+    --args ./build/src/spek tests/samples/2ch-44100Hz-16bps.m4a
 status=$?
 cat old-glibc-program.log
 exit "$status"

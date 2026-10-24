@@ -434,12 +434,14 @@ jobs:
               return 1
             fi
           }
-          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          # No-argument startup is intentionally console help; pass a file
+          # to exercise the graphical entry point.
+          run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]wav$' tests/samples/2ch-44100Hz-16bps.wav
           run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
           # The reported failures were from a root shell. Exercise that user
           # and its real home directory as well, not just a fresh CI account.
           export SPEK_AS_ROOT=1
-          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
           unset SPEK_AS_ROOT
 
       # A static glibc executable can still load NSS and gconv modules from
