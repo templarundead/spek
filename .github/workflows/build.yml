@@ -134,6 +134,7 @@ jobs:
             pkg-config \
             xauth \
             xdotool \
+            x11-xserver-utils \
             xvfb \
             "${{ matrix.compiler }}"
 
@@ -325,6 +326,11 @@ jobs:
             set +e
             SPEK_EXPECTED_TITLE="$expected" SPEK_AS_ROOT="${SPEK_AS_ROOT:-0}" \
               xvfb-run -a bash -c '
+              if [[ -n "${SPEK_XRANDR_FBMM:-}" ]]; then
+                echo "Setting XRandR physical screen size to $SPEK_XRANDR_FBMM"
+                xrandr --fbmm "$SPEK_XRANDR_FBMM" || exit 1
+                xrandr --current
+              fi
               if [[ "$SPEK_AS_ROOT" == 1 ]]; then
                 sudo --preserve-env=DISPLAY,XAUTHORITY \
                   ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
@@ -392,6 +398,11 @@ jobs:
           }
           run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
           run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
+          # Some X11 drivers report only one physical monitor dimension.
+          # Exercise the wxGTK PPI path with an asymmetric zero size too.
+          export SPEK_XRANDR_FBMM=0x100
+          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          unset SPEK_XRANDR_FBMM
           # The reported failures were from a root shell. Exercise that user
           # and its real home directory as well, not just a fresh CI account.
           export SPEK_AS_ROOT=1
