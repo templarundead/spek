@@ -5,6 +5,7 @@
 
 #include <wx/aboutdlg.h>
 #include <wx/artprov.h>
+#include <wx/dcbuffer.h>
 #include <wx/dnd.h>
 #include <wx/filename.h>
 #include <wx/protocol/http.h>
@@ -24,6 +25,8 @@
 wxDEFINE_EVENT(SPEK_NOTIFY_EVENT, wxCommandEvent);
 
 BEGIN_EVENT_TABLE(SpekWindow, wxFrame)
+    EVT_ERASE_BACKGROUND(SpekWindow::on_erase_background)
+    EVT_PAINT(SpekWindow::on_paint)
     EVT_MENU(wxID_OPEN, SpekWindow::on_open)
     EVT_MENU(wxID_SAVE, SpekWindow::on_save)
     EVT_MENU(wxID_EXIT, SpekWindow::on_exit)
@@ -57,6 +60,12 @@ private:
 SpekWindow::SpekWindow(const wxString& path) :
     wxFrame(NULL, -1, wxEmptyString, wxDefaultPosition, wxDefaultSize), path(path)
 {
+    // Paint the frame as one buffered surface. In particular, do not let the
+    // native Windows background erase expose a white frame in dark mode.
+    this->SetExtraStyle(this->GetExtraStyle() | wxWS_EX_PROCESS_UI_UPDATES);
+    this->SetBackgroundStyle(wxBG_STYLE_PAINT);
+    this->SetDoubleBuffered(true);
+
     this->description = _("Spek - Acoustic Spectrum Analyser");
     SetTitle(this->description);
     SetSize(this->FromDIP(wxSize(640, 480)));
@@ -94,6 +103,17 @@ SpekWindow::SpekWindow(const wxString& path) :
     SetMenuBar(menu);
 
     wxToolBar *toolbar = CreateToolBar();
+    toolbar->SetExtraStyle(toolbar->GetExtraStyle() | wxWS_EX_PROCESS_UI_UPDATES);
+    toolbar->SetBackgroundStyle(wxBG_STYLE_PAINT);
+    toolbar->SetDoubleBuffered(true);
+    // wxToolBar is native on Windows and has no application wxPaintEvent:
+    // WS_EX_COMPOSITED makes its native paint atomic. Custom paint handlers
+    // (the frame and spectrogram) use wxAutoBufferedPaintDC instead.
+    toolbar->Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent& event) {
+        // The native toolbar paints itself, including its background. Do not
+        // let a separate WM_ERASEBKGND fill it with the default light colour.
+        event.Skip(false);
+    });
     toolbar->AddTool(
         wxID_OPEN,
         wxEmptyString,
@@ -159,18 +179,37 @@ SpekWindow::SpekWindow(const wxString& path) :
     std::thread(check_version, this).detach();
 }
 
+void SpekWindow::on_erase_background(wxEraseEvent& event)
+{
+    // The paint handler below draws the complete frame background. Skipping
+    // the native erase avoids a light-coloured intermediate frame on Windows.
+    event.Skip(false);
+}
+
+void SpekWindow::on_paint(wxPaintEvent&)
+{
+    wxAutoBufferedPaintDC dc(this);
+    dc.SetBackground(wxBrush(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW)));
+    dc.Clear();
+}
+
 void SpekWindow::open(const wxString& path)
 {
-    wxFileName file_name(path);
-    if (file_name.FileExists()) {
-        this->path = path;
-        wxString full_name = file_name.GetFullName();
-        // TRANSLATORS: window title, %s is replaced with the file name
-        wxString title = wxString::Format(_("Spek - %s"), full_name.c_str());
-        SetTitle(title);
-
-        this->spectrogram->open(path);
+    if (path.IsEmpty()) {
+        return;
     }
+
+    // FileExists() can itself wait for a cloud-backed or network path. Let
+    // Audio::open() perform the real check in its worker and report any error
+    // instead of blocking the window before it can repaint.
+    wxFileName file_name(path);
+    this->path = path;
+    wxString full_name = file_name.GetFullName();
+    // TRANSLATORS: window title, %s is replaced with the file name
+    wxString title = wxString::Format(_("Spek - %s"), full_name.c_str());
+    SetTitle(title);
+
+    this->spectrogram->open(path);
 }
 
 void SpekWindow::on_open(wxCommandEvent&)
@@ -298,7 +337,7 @@ void SpekWindow::on_about(wxCommandEvent&)
     info.SetDescription(this->description);
 #ifdef OS_UNIX
     info.SetWebSite("https://www.spek.cc/", _("Spek Website"));
-    info.SetIcon(wxArtProvider::GetIcon("spek", wxART_OTHER, wxSize(128, 128)));
+    info.SetIcon(wxArtProvider::GetIcon(ART_SPEK, wxART_OTHER, wxSize(128, 128)));
 #endif
     wxAboutBox(info);
 }

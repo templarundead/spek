@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -44,6 +45,8 @@ class SpekApp : public wxApp
 {
 public:
     bool OnInit() override;
+    void OnInitCmdLine(wxCmdLineParser& parser) override;
+    bool OnCmdLineParsed(wxCmdLineParser& parser) override;
     int OnRun() override;
 
 #ifdef OS_OSX
@@ -73,15 +76,26 @@ std::string wx_translate_plural(const char *msgid, const char *msgid_plural, uns
     ).utf8_str());
 }
 
+wxAppConsole *create_app()
+{
+    wxAppConsole::CheckBuildOptions(WX_BUILD_OPTIONS_SIGNATURE, "Spek");
+    return new SpekApp;
+}
+
 } // namespace
 
-// Spek defines its own main(), so we only implement the application class.
-wxIMPLEMENT_APP_NO_MAIN(SpekApp);
+// Do not use wxIMPLEMENT_APP_NO_MAIN() here. That macro creates a global
+// wxAppInitializer, which calls into wx before main() and before the static
+// wxGTK support has a well-defined initialization order. The initializer is
+// installed explicitly at the beginning of spek_run_gui() instead.
 
 bool SpekApp::OnInit()
 {
     if (!wxApp::OnInit()) {
         return false;
+    }
+    if (this->quit) {
+        return true;
     }
 
     // FFmpeg is very chatty about the formats it has to guess, only report
@@ -103,6 +117,15 @@ bool SpekApp::OnInit()
     spek_platform_init();
     SpekPreferences::get().init();
 
+    this->window = new SpekWindow(this->path);
+    this->window->Show(true);
+    SetTopWindow(this->window);
+
+    return true;
+}
+
+void SpekApp::OnInitCmdLine(wxCmdLineParser& parser)
+{
     static const wxCmdLineEntryDesc desc[] = {
         {
             wxCMD_LINE_SWITCH,
@@ -131,15 +154,14 @@ bool SpekApp::OnInit()
         wxCMD_LINE_DESC_END,
     };
 
-    wxCmdLineParser parser(desc, argc, argv);
-    const int ret = parser.Parse(true);
-    if (ret == 1) {
-        return false;
-    }
-    if (ret == -1) {
-        this->quit = true;
-        return true;
-    }
+    // wxApp::OnInit() parses the command line before returning. Supply our
+    // options here instead of parsing it a second time with the default wx
+    // options first, which rejects a perfectly valid audio file argument.
+    parser.SetDesc(desc);
+}
+
+bool SpekApp::OnCmdLineParsed(wxCmdLineParser& parser)
+{
     if (parser.Found("version")) {
         // TRANSLATORS: the %s is the package version.
         wxPrintf(_("Spek version %s"), wxString::FromUTF8(SPEK_VERSION).c_str());
@@ -150,10 +172,6 @@ bool SpekApp::OnInit()
     if (parser.GetParamCount()) {
         this->path = parser.GetParam();
     }
-
-    this->window = new SpekWindow(this->path);
-    this->window->Show(true);
-    SetTopWindow(this->window);
 
     return true;
 }
@@ -178,5 +196,15 @@ void SpekApp::MacOpenFiles(const wxArrayString& files)
 
 int spek_run_gui(int argc, char **argv)
 {
+#if defined(OS_UNIX) && SPEK_STATIC_LINK
+    // Spek draws through wxDC and does not create an OpenGL canvas. Prevent
+    // GTK's startup GLX probe from dlopen()ing the host's Mesa/LLVM stack into
+    // a fully static process, which can crash in LLVM's initialisers.
+    setenv("GDK_GL", "disable", 1);
+#endif
+
+    // Install this only after all static constructors have run. In particular,
+    // avoid wxAppInitializer's pre-main call into wxWidgets (see above).
+    wxApp::SetInitializerFunction(&create_app);
     return wxEntry(argc, argv);
 }

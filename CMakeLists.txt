@@ -31,6 +31,31 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+if(NOT MSVC)
+    # Give the linker an opportunity to discard unused functions and data.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
+    if(APPLE)
+        # Apple's ld uses -dead_strip instead of the ELF --gc-sections flag.
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-dead_strip")
+    else()
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections")
+    endif()
+endif()
+
+if(UNIX AND NOT APPLE)
+    # mold is an optional accelerator; retain the system linker as a fallback.
+    find_program(MOLD_LINKER mold)
+    if(MOLD_LINKER)
+        message(STATUS "Found mold linker: ${MOLD_LINKER}. Activating for fast builds.")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=mold")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=mold")
+    else()
+        message(STATUS "mold linker not found. Using system default linker.")
+    endif()
+endif()
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
@@ -42,6 +67,7 @@ option(SPEK_BUILD_GUI "Build the wxWidgets graphical interface" ON)
 option(SPEK_BUILD_TESTS "Build the test suite" ON)
 option(SPEK_ENABLE_NLS "Enable translations" ON)
 option(SPEK_INSTALL "Generate the installation rules" ON)
+option(SPEK_STATIC_LINK "Link a self-contained static executable (Linux only)" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -54,6 +80,27 @@ elseif(APPLE)
     set(OS_OSX TRUE)
 else()
     set(OS_UNIX TRUE)
+endif()
+
+if(MSVC AND (VCPKG_CRT_LINKAGE STREQUAL "static"
+             OR VCPKG_TARGET_TRIPLET MATCHES "-static$"))
+    # vcpkg builds the packages of a static triplet with the static runtime
+    # library, and mixing the two runtimes does not link.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
+if(SPEK_STATIC_LINK)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "SPEK_STATIC_LINK is currently supported only on Linux")
+    endif()
+
+    # Static archives do not record their transitive dependencies. Ask both
+    # pkg-config and wx-config for the complete static link interface, and
+    # link the runtime libraries as well so the artifact does not depend on
+    # the compiler or FFmpeg versions installed on the build machine.
+    set(FFmpeg_USE_STATIC_LIBS ON)
+    list(APPEND wxWidgets_CONFIG_OPTIONS --static)
+    add_link_options(-static)
 endif()
 
 # Threads are used by the pipeline and by the batch mode of the CLI.
@@ -91,9 +138,11 @@ if(SPEK_BUILD_GUI)
            OR CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
         # vcpkg builds wxWidgets with CMake and installs a config package with
         # imported targets.
-        find_package(wxWidgets 3.2 CONFIG REQUIRED COMPONENTS core base)
+        # wxWidgets' config uses SameMajorVersion compatibility: asking for
+        # 3.2 would reject the supported 3.3 overlay before CMake can load it.
+        find_package(wxWidgets CONFIG REQUIRED COMPONENTS core base net)
     else()
-        find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base)
+        find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base net)
     endif()
 endif()
 
@@ -111,12 +160,6 @@ if(Intl_FOUND)
     set(SPEK_HAVE_INTL 1)
 else()
     set(SPEK_HAVE_INTL 0)
-endif()
-
-if(SPEK_BUILD_GUI)
-    set(SPEK_BUILD_GUI_VALUE 1)
-else()
-    set(SPEK_BUILD_GUI_VALUE 0)
 endif()
 
 set(SPEK_PROGRAM_NAME "spek")

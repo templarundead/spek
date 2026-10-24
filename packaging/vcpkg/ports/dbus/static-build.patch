@@ -1,0 +1,24 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -100,7 +100,7 @@
+ set(DBUS_DATADIR             ${CMAKE_INSTALL_FULL_DATADIR})
+ 
+ #enable building of shared library
+-set(BUILD_SHARED_LIBS ON)
++option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+ 
+ set(INSTALL_TARGETS_DEFAULT_ARGS EXPORT DBus1Targets RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ 
+diff --git a/dbus/CMakeLists.txt b/dbus/CMakeLists.txt
+--- a/dbus/CMakeLists.txt
++++ b/dbus/CMakeLists.txt
+@@ -263,7 +263,7 @@
+ find_library(LIBSOCKET socket)
+ 
+ ### Client library
+-add_library(dbus-1 SHARED
++add_library(dbus-1
+     ${libdbus_SOURCES}
+     ${libdbus_HEADERS}
+ )

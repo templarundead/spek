@@ -47,6 +47,31 @@ Result variables
 
 set(FFmpeg_ALL_COMPONENTS AVCODEC AVFORMAT AVUTIL SWRESAMPLE SWSCALE AVFILTER AVDEVICE)
 
+# A statically linked FFmpeg does not carry the libraries it was built
+# against: they are listed in Libs.private of its pkg-config files, or, when
+# pkg-config is not around, have to be named by hand.
+set(FFmpeg_WINDOWS_SYSTEM_LIBRARIES
+    advapi32
+    bcrypt
+    d3d11
+    dxgi
+    gdi32
+    mfplat
+    mfuuid
+    ole32
+    oleaut32
+    psapi
+    secur32
+    shell32
+    shlwapi
+    strmiids
+    user32
+    uuid
+    vfw32
+    winmm
+    ws2_32
+)
+
 if(NOT FFmpeg_FIND_COMPONENTS)
     set(FFmpeg_FIND_COMPONENTS ${FFmpeg_ALL_COMPONENTS})
 endif()
@@ -126,11 +151,35 @@ foreach(component IN LISTS FFmpeg_ALL_COMPONENTS)
     if(FFmpeg_${component}_INCLUDE_DIR AND FFmpeg_${component}_LIBRARY)
         set(FFmpeg_${component}_FOUND TRUE)
 
+        # The libraries which have to be linked along with this one. The
+        # vcpkg toolchain file does not define VCPKG_LIBRARY_LINKAGE, so the
+        # triplet name is checked as well.
+        set(FFmpeg_${component}_EXTRA_LIBRARIES "")
+        if(FFmpeg_USE_STATIC_LIBS OR VCPKG_LIBRARY_LINKAGE STREQUAL "static"
+           OR VCPKG_TARGET_TRIPLET MATCHES "static")
+            if(PC_FFmpeg_${component}_FOUND AND NOT WIN32)
+                # FindPkgConfig has no STATIC_LINK_LIBRARIES variant. The
+                # static LDFLAGS include the complete private link interface
+                # in the order required by static archives.
+                list(APPEND FFmpeg_${component}_EXTRA_LIBRARIES
+                    ${PC_FFmpeg_${component}_STATIC_LDFLAGS}
+                )
+            endif()
+            if(WIN32)
+                # pkg-config on Windows does not list the system libraries,
+                # so name them by hand.
+                list(APPEND FFmpeg_${component}_EXTRA_LIBRARIES
+                    ${FFmpeg_WINDOWS_SYSTEM_LIBRARIES}
+                )
+            endif()
+        endif()
+
         if(NOT TARGET FFmpeg::${lower})
             add_library(FFmpeg::${lower} UNKNOWN IMPORTED)
             set_target_properties(FFmpeg::${lower} PROPERTIES
                 IMPORTED_LOCATION "${FFmpeg_${component}_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${FFmpeg_${component}_INCLUDE_DIR}"
+                INTERFACE_LINK_LIBRARIES "${FFmpeg_${component}_EXTRA_LIBRARIES}"
             )
             # FFmpeg is written in C, make sure the headers are included as such.
             set_property(TARGET FFmpeg::${lower} PROPERTY IMPORTED_LINK_INTERFACE_LANGUAGES C)

@@ -1,0 +1,10 @@
+{
+  "name": "zlib",
+  "version-string": "zlib-ng",
+  "description": "zlib-compatible API provided by zlib-ng",
+  "homepage": "https://github.com/zlib-ng/zlib-ng",
+  "license": "Zlib",
+  "dependencies": [
+    "zlib-ng"
+  ]
+}

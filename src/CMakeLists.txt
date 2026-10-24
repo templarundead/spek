@@ -24,6 +24,14 @@ add_executable(spek
     spek-main.cc
 )
 
+if(UNIX AND NOT APPLE AND SPEK_STATIC_LINK)
+    # The reporter is deliberately part of the executable, not a wx callback,
+    # so it also covers failures in static constructors before main(). Do not
+    # add -rdynamic here: exporting a static executable's symbols can interfere
+    # with libraries which GTK loads at runtime.
+    target_sources(spek PRIVATE spek-crash.cc)
+endif()
+
 target_link_libraries(spek PRIVATE spek-cli spek-core)
 
 if(SPEK_BUILD_GUI)
@@ -38,15 +46,28 @@ set_target_properties(spek PROPERTIES
 )
 
 if(WIN32 AND SPEK_BUILD_GUI)
-    # The application icon and, through wx/msw/wx.rc, the per-monitor DPI
-    # awareness manifest that makes wxWidgets aware of High-DPI screens.
     # Resource objects cannot live in a static library, so the script is
-    # compiled into the executable itself.
+    # compiled into the executable itself. It contains the icons and the
+    # explicit High-DPI manifest for every Windows resource compiler.
     target_sources(spek PRIVATE "${PROJECT_SOURCE_DIR}/dist/win/spek.rc")
     set_source_files_properties(
         "${PROJECT_SOURCE_DIR}/dist/win/spek.rc"
-        PROPERTIES INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/dist/win"
+        PROPERTIES INCLUDE_DIRECTORIES
+            "${PROJECT_SOURCE_DIR}/dist/win;${PROJECT_SOURCE_DIR}/src"
     )
+    set_property(SOURCE "${PROJECT_SOURCE_DIR}/dist/win/spek.rc"
+        APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/src/app.manifest")
+
+    if(MSVC)
+        # Keep DPI awareness in the Visual Studio project as well as in the
+        # manifest so MSVC, clang-cl and the IDE all use the same setting.
+        set_property(TARGET spek PROPERTY VS_DPI_AWARE "PerMonitor")
+        target_sources(spek PRIVATE "${PROJECT_SOURCE_DIR}/src/app.manifest")
+        # Do not also embed RT_MANIFEST from spek.rc: VS_DPI_AWARE and the
+        # manifest tool already produce one resource for this executable.
+        set_property(SOURCE "${PROJECT_SOURCE_DIR}/dist/win/spek.rc"
+            APPEND PROPERTY COMPILE_DEFINITIONS SPEK_EXTERNAL_MANIFEST)
+    endif()
 endif()
 
 if(WIN32)
@@ -56,9 +77,15 @@ if(WIN32)
     spek_copy_runtime_dlls(spek)
 endif()
 
-if(MSVC)
-    # Console subsystem: spek is also a command line tool (--cli).
-    set_target_properties(spek PROPERTIES WIN32_EXECUTABLE FALSE)
+if(WIN32 AND SPEK_BUILD_GUI)
+    # Do not create a console window for normal GUI startup. Command-line
+    # modes attach to the parent console explicitly in spek-main.cc.
+    set_target_properties(spek PROPERTIES WIN32_EXECUTABLE TRUE)
+    if(MSVC)
+        # Keep the existing main() entry point while using the Windows GUI
+        # subsystem. The CRT still performs normal startup and exit handling.
+        target_link_options(spek PRIVATE "/ENTRY:mainCRTStartup")
+    endif()
 endif()
 
 if(SPEK_INSTALL)

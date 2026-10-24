@@ -33,6 +33,7 @@ add_library(spek-gui STATIC
     spek-window.h
     spek-gui.cc
     spek-gui.h
+    spek-icon.xpm
 )
 
 target_include_directories(spek-gui
@@ -55,7 +56,7 @@ if(APPLE)
 endif()
 
 if(TARGET wxWidgets::core)
-    target_link_libraries(spek-gui PUBLIC wxWidgets::core wxWidgets::base)
+    target_link_libraries(spek-gui PUBLIC wxWidgets::core wxWidgets::base wxWidgets::net)
 else()
     include("${wxWidgets_USE_FILE}")
     target_include_directories(spek-gui PUBLIC ${wxWidgets_INCLUDE_DIRS})

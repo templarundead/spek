@@ -3,6 +3,10 @@
 #include <cstring>
 
 #ifdef OS_WIN
+// wxWidgets 3.3 uses Winsock2; don't let windows.h pull in Winsock 1 first.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 

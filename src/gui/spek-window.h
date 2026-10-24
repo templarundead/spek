@@ -11,6 +11,8 @@ public:
     void open(const wxString& path);
 
 private:
+    void on_erase_background(wxEraseEvent& event);
+    void on_paint(wxPaintEvent& event);
     void on_open(wxCommandEvent& event);
     void on_save(wxCommandEvent& event);
     void on_exit(wxCommandEvent& event);

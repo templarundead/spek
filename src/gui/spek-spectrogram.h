@@ -18,6 +18,7 @@
 #include <memory>
 
 #include <wx/wx.h>
+#include <wx/timer.h>
 
 #include "spek-palette.h"
 #include "spek-pipeline.h"
@@ -36,6 +37,10 @@ public:
     void save(const wxString& path);
 
 private:
+    // The worker only owns this request and never dereferences the window.
+    // This keeps a detached network open safe when the window is destroyed.
+    struct OpenRequest;
+
     // The layout of the spectrogram inside the window, in pixels.
     //
     // The paddings are calculated from the size of the labels and the fonts
@@ -71,9 +76,11 @@ private:
     void on_size(wxSizeEvent& evt);
     void on_have_sample(SpekHaveSampleEvent& evt);
     void on_dpi_changed(wxDPIChangedEvent& event);
+    void on_open_timer(wxTimerEvent& event);
     void render(wxDC& dc);
 
     void start();
+    void finish_open(const std::shared_ptr<OpenRequest>& request);
     void stop();
 
     void create_palette();
@@ -86,6 +93,8 @@ private:
     int plot_width() const;
 
     std::unique_ptr<SpekPipeline> pipeline;
+    std::shared_ptr<OpenRequest> open_request;
+    wxTimer open_timer;
     int streams;
     int stream;
     int channels;
