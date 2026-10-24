@@ -533,12 +533,30 @@ std::string process_file(
 
 bool wants_cli(int argc, char **argv)
 {
+    // Keep this list in sync with parse_options(). Every console-only option,
+    // not just --cli itself, must bypass wxEntry(): otherwise a valid headless
+    // command such as `spek --input=file --output=image.png` starts wxGTK.
+    static constexpr std::string_view short_options[] = {
+        "-c", "-h", "-V", "-i", "-o", "-w", "-H", "-r", "-j", "-q",
+    };
+    static constexpr std::string_view long_options[] = {
+        "--cli", "--help", "--version", "--input", "--output", "--width",
+        "--height", "--fft-bits", "--stream", "--channel", "--min-db", "--max-db",
+        "--palette", "--window", "--recursive", "--jobs", "--quiet",
+    };
+
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
-        if (arg == "-c" || arg == "--cli" || arg == "-i" || arg == "--input" || arg == "-o"
-            || arg == "--output" || arg == "-h" || arg == "--help" || arg == "-V"
-            || arg == "--version") {
-            return true;
+        for (const auto name : short_options) {
+            if (arg == name) {
+                return true;
+            }
+        }
+        for (const auto name : long_options) {
+            if (arg == name
+                || (arg.size() > name.size() && arg.starts_with(name) && arg[name.size()] == '=')) {
+                return true;
+            }
         }
     }
 

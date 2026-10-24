@@ -288,8 +288,21 @@ jobs:
       - name: Smoke test the command line interface (Linux, macOS)
         if: runner.os != 'Windows'
         run: |
-          ./build/src/spek --version
-          ./build/src/spek --cli --input tests/samples --output build/spectrograms --width 100
+          # An SSH/headless session has no display server. Exercise both mode
+          # selectors with all display variables removed: reaching wxEntry()
+          # for either one would make wxGTK fail before running the CLI.
+          run_headless() {
+            env -u DISPLAY -u WAYLAND_DISPLAY -u XAUTHORITY "$@"
+          }
+          run_headless ./build/src/spek --version
+          run_headless ./build/src/spek --cli --version
+          run_headless ./build/src/spek -c --version
+          run_headless ./build/src/spek --cli --input tests/samples --output build/spectrograms --width 100
+          # Attached long-option values must select the CLI before GTK too.
+          run_headless ./build/src/spek \
+            --input=tests/samples/2ch-44100Hz-16bps.m4a \
+            --output=build/headless-cli.png --width=100
+          test -s build/headless-cli.png
 
       - name: Smoke test the command line interface (Windows)
         if: runner.os == 'Windows'
