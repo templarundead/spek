@@ -4,6 +4,10 @@
 #include "spek-artwork.h"
 #include "spek-config.h"
 
+#ifdef OS_UNIX
+#include "spek-icon.xpm"
+#endif
+
 class SpekArtProvider : public wxArtProvider
 {
 protected:
@@ -17,7 +21,10 @@ wxBitmap SpekArtProvider::CreateBitmap(
 	(void) id, (void) client, (void) size;
 #ifdef OS_UNIX
     if (id == ART_SPEK) {
-        return wxArtProvider::GetBitmap("spek", client, size);
+        // Keep the application icon in the executable. A static binary cannot
+        // rely on the host's icon theme being installed or on its pixbuf
+        // loaders, and an invalid theme icon makes wx show a modal assert.
+        return wxBitmap(spek_icon_xpm);
     }
     if (id == ART_HELP) {
         return wxArtProvider::GetBitmap("gtk-help", client, size);
@@ -68,7 +75,11 @@ wxIconBundle SpekArtProvider::CreateIconBundle(const wxArtID& id, const wxArtCli
 	(void) id, (void) client;
 #ifdef OS_UNIX
     if (id == ART_SPEK) {
-        return wxArtProvider::GetIconBundle("spek", client);
+        wxIconBundle bundle;
+        wxIcon icon;
+        icon.CopyFromBitmap(wxBitmap(spek_icon_xpm));
+        bundle.AddIcon(icon);
+        return bundle;
     }
 #endif
 #ifdef OS_WIN

@@ -298,7 +298,7 @@ void SpekWindow::on_about(wxCommandEvent&)
     info.SetDescription(this->description);
 #ifdef OS_UNIX
     info.SetWebSite("https://www.spek.cc/", _("Spek Website"));
-    info.SetIcon(wxArtProvider::GetIcon("spek", wxART_OTHER, wxSize(128, 128)));
+    info.SetIcon(wxArtProvider::GetIcon(ART_SPEK, wxART_OTHER, wxSize(128, 128)));
 #endif
     wxAboutBox(info);
 }

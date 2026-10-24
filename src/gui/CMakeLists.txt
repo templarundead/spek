@@ -33,6 +33,7 @@ add_library(spek-gui STATIC
     spek-window.h
     spek-gui.cc
     spek-gui.h
+    spek-icon.xpm
 )
 
 target_include_directories(spek-gui
