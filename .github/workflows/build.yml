@@ -230,6 +230,70 @@ jobs:
         id: build
         run: cmake --build build --config Release
 
+      # TEMPORARY: symbolicate the addresses from the reported aarch64
+      # artifact. The source is unchanged from 315c601, so this run has the
+      # same link layout; remove this diagnostic after the trace is read.
+      - name: Symbolicate the reported aarch64 crash
+        if: runner.os == 'Linux' && matrix.triplet == 'arm64-linux-static'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          addresses=(
+            0x475d28 0x23251b0 0x2323c6c 0x231d188 0x23233bc
+            0x2323750 0x2329a80 0x231d20c 0x2329d64 0x229b084
+            0x229a6c8 0x229ace0 0x2291d20 0x2290c64 0x22907bc
+            0x21c2ec0 0x21c5614 0x21c6fd4 0x21c706c 0x474854
+            0x2290398 0x475af0
+          )
+          {
+            echo 'Reported source: 315c601 (workflow-only diagnostic commit).'
+            file ./build/src/spek
+            readelf -h ./build/src/spek | grep -E 'Class:|Machine:|Type:'
+            readelf -S ./build/src/spek | grep -E 'symtab|debug' || true
+            for address in "${addresses[@]}"; do
+              echo
+              echo "$address"
+              addr2line -C -f -i -p -e ./build/src/spek "$address"
+            done
+            echo
+            echo 'Nearest text symbols (fallback if addr2line has no line info):'
+            python3 - "${addresses[@]}" <<'PY'
+          import bisect
+          import subprocess
+          import sys
+
+          symbols = []
+          for line in subprocess.check_output(
+              ['nm', '-n', '-C', '--defined-only', './build/src/spek'],
+              text=True, errors='replace'
+          ).splitlines():
+              fields = line.split(None, 2)
+              if len(fields) == 3 and fields[1] in 'TtWw':
+                  try:
+                      symbols.append((int(fields[0], 16), fields[2]))
+                  except ValueError:
+                      pass
+          addresses = [int(value, 16) for value in sys.argv[1:]]
+          values = [value for value, _ in symbols]
+          for address in addresses:
+              index = bisect.bisect_right(values, address) - 1
+              if index >= 0:
+                  value, name = symbols[index]
+                  print(f'{address:#x}: {name} + {address - value:#x}')
+              else:
+                  print(f'{address:#x}: no preceding text symbol')
+          PY
+          } > crash-symbols.log 2>&1
+          jq -Rs --arg sha "$GITHUB_SHA" \
+            '{name: "temporary-crash-symbolization", head_sha: $sha,
+              status: "completed", conclusion: "neutral",
+              output: {title: "Reported aarch64 crash symbols",
+              summary: "Symbols for the addresses supplied with the 315c601 artifact",
+              text: .}}' crash-symbols.log |
+            gh api -X POST "repos/$GH_REPO/check-runs" --input -
+
       # TEMPORARY: publish Linux configure/link failures where they can be
       # diagnosed without access to the runner.
       - name: Report the Linux build errors
