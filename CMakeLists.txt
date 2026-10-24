@@ -113,9 +113,9 @@ if(SPEK_BUILD_GUI)
            OR CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
         # vcpkg builds wxWidgets with CMake and installs a config package with
         # imported targets.
-        find_package(wxWidgets 3.2 CONFIG REQUIRED COMPONENTS core base)
+        find_package(wxWidgets 3.2 CONFIG REQUIRED COMPONENTS core base net)
     else()
-        find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base)
+        find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base net)
     endif()
 endif()
 

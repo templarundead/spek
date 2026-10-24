@@ -55,7 +55,7 @@ if(APPLE)
 endif()
 
 if(TARGET wxWidgets::core)
-    target_link_libraries(spek-gui PUBLIC wxWidgets::core wxWidgets::base)
+    target_link_libraries(spek-gui PUBLIC wxWidgets::core wxWidgets::base wxWidgets::net)
 else()
     include("${wxWidgets_USE_FILE}")
     target_include_directories(spek-gui PUBLIC ${wxWidgets_INCLUDE_DIRS})
