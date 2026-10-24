@@ -17,6 +17,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <string_view>
 
 #include "spek-cli.h"
 #include "spek-i18n.h"
@@ -29,7 +30,32 @@
 #endif
 
 #if SPEK_BUILD_GUI
+#include <wx/app.h>
+#include <wx/init.h>
+
 #include "spek-gui.h"
+#endif
+
+#if SPEK_BUILD_GUI
+namespace
+{
+
+bool is_console_info_request(int argc, char **argv)
+{
+    if (argc == 1) {
+        return true;
+    }
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view argument(argv[i] == nullptr ? "" : argv[i]);
+        if (argument == "-h" || argument == "--help" || argument == "-V"
+            || argument == "--version") {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 #endif
 
 #ifdef OS_WIN
@@ -55,10 +81,8 @@ void attach_parent_console()
 int main(int argc, char **argv)
 {
     // Select the execution mode before doing anything which could initialize
-    // wxWidgets. No-argument help and the CLI deliberately use no wxApp at
-    // all: this is stricter than wxAppConsole and cannot require DISPLAY on
-    // a wxGTK build. The analysis pipeline and full-image renderer are both
-    // toolkit-independent.
+    // the GUI. Help and no-argument invocations are handled without wx at
+    // all. Analysis uses a console app only, never a GUI app or wxFrame.
 #if SPEK_BUILD_GUI
     const bool use_cli = spek::wants_cli(argc, argv);
 #ifdef OS_WIN
@@ -87,7 +111,24 @@ int main(int argc, char **argv)
     }
 #endif
 
-    // Run the analysis directly, without constructing wxApp, wxFrame or any
-    // other wx object. Correspondingly, no wxUninitialize() is needed here.
+#if SPEK_BUILD_GUI
+    // Informational console requests must remain useful even on a machine
+    // without a display or a working wx runtime.
+    if (is_console_info_request(argc, argv)) {
+        return spek::run_cli(argc, argv);
+    }
+
+    // Use wx's console lifecycle for analysis, but never enter its event
+    // loop. In particular, wxAppConsole does not call gtk_init_check(), so
+    // this remains suitable for SSH/headless use with a wxGTK build.
+    wxApp::SetInstance(new wxAppConsole());
+    if (!wxInitialize(argc, argv)) {
+        return 1;
+    }
+    const int exit_code = spek::run_cli(argc, argv);
+    wxUninitialize();
+    return exit_code;
+#else
     return spek::run_cli(argc, argv);
+#endif
 }
