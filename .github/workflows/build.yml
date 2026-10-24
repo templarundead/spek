@@ -398,6 +398,24 @@ jobs:
           run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
           unset SPEK_AS_ROOT
 
+      # A static glibc executable can still load NSS and gconv modules from
+      # the host. Run the artifact with an older glibc than the build runner
+      # to exercise that boundary instead of testing only on the build host.
+      # The X server stays on the runner, so the container needs no GUI
+      # packages of its own. Keep one x64 job to avoid duplicating this check.
+      - name: Smoke test static Linux with an older glibc
+        if: runner.os == 'Linux' && (matrix.cache_id == 'x64-linux-static-gcc13' || matrix.cache_id == 'arm64-linux-static-gcc13')
+        run: |
+          : > old-glibc.log
+          xvfb-run -a -s '-screen 0 1280x800x24 -ac' bash -c '
+            unset XAUTHORITY
+            docker run --rm -i --network host \
+              -v "$GITHUB_WORKSPACE:/work" \
+              -v /tmp/.X11-unix:/tmp/.X11-unix \
+              -e DISPLAY -e HOME=/tmp -w /work debian:12 bash -s \
+              < packaging/ci/old-glibc-smoke.sh
+          ' 2>&1 | tee -a old-glibc.log
+
       # Exercise the other entry point as well: without --cli the same
       # executable must create its wxWidgets window instead of exiting after
       # processing command-line options. This also catches a GUI accidentally
@@ -439,7 +457,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          cat gui-driver.log gui-smoke.log gui-gdb.log 2>/dev/null > runtime-failure.log || true
+          cat gui-driver.log gui-smoke.log gui-gdb.log old-glibc.log old-glibc-program.log 2>/dev/null > runtime-failure.log || true
           if [[ ! -s runtime-failure.log ]]; then
             echo "The job failed before producing a runtime log." > runtime-failure.log
           fi
