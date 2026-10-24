@@ -345,6 +345,14 @@ void SpekWindow::on_show_toolbar(wxCommandEvent& event)
     const bool show = event.IsChecked();
     this->toolbar->Show(show);
     this->Layout();
+
+    // Layout alone does not invalidate the native frame or its child on all
+    // platforms. Repaint both now so the old toolbar/plot labels cannot stay
+    // in the newly exposed area (especially with a dark background).
+    this->Refresh();
+    this->spectrogram->Refresh();
+    this->Update();
+
     SpekPreferences::get().set_show_toolbar(show);
 }
 
