@@ -301,16 +301,30 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set +e
-          timeout --signal=TERM --kill-after=5s 15s \
-            xvfb-run -a ./build/src/spek tests/samples/2ch-44100Hz-16bps.m4a \
-            > gui-smoke.log 2>&1
+          xvfb-run -a bash -c '
+            ./build/src/spek "$1" > gui-smoke.log 2>&1 &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true" EXIT
+            for i in {1..30}; do
+              if ! kill -0 $pid 2>/dev/null; then
+                wait $pid
+                status=$?
+                echo "The Linux GUI exited prematurely with status $status"
+                exit 1
+              fi
+              if xdotool search --onlyvisible \
+                  --name "Spek - 2ch-44100Hz-16bps[.]m4a" >/dev/null 2>&1; then
+                exit 0
+              fi
+              sleep 0.5
+            done
+            echo "The Linux GUI did not open the audio file within 15 seconds"
+            exit 1
+          ' bash tests/samples/2ch-44100Hz-16bps.m4a > gui-driver.log 2>&1
           status=$?
           set -e
-          cat gui-smoke.log
-          # Timeout means that the GUI stayed open. Any early exit, and in
-          # particular SIGSEGV, is a failure; get a backtrace for the log.
-          if [[ $status -ne 124 ]]; then
-            echo "The Linux GUI exited prematurely with status $status" >&2
+          cat gui-driver.log gui-smoke.log
+          if [[ $status -ne 0 ]]; then
             set +e
             timeout --signal=TERM --kill-after=5s 20s \
               xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt" \
@@ -354,6 +368,26 @@ jobs:
                   Stop-Process -Id $process.Id -Force
               }
           }
+
+      - name: Report the Linux runtime errors
+        if: failure() && runner.os == 'Linux' && steps.build.outcome == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cat gui-driver.log gui-smoke.log gui-gdb.log 2>/dev/null > runtime-failure.log || true
+          if [[ ! -s runtime-failure.log ]]; then
+            echo "The job failed before producing a runtime log." > runtime-failure.log
+          fi
+          jq -Rs --arg sha "$GITHUB_SHA" \
+            --arg name "runtime-log (${{ matrix.name }})" \
+            '{name: $name, head_sha: $sha, status: "completed",
+              conclusion: "failure",
+              output: {title: "Runtime log", summary: "The runtime test failed",
+              text: (.[-60000:])}}' runtime-failure.log |
+            gh api -X POST "repos/$GH_REPO/check-runs" --input -
+          exit 1
 
       # A fully static executable has no DT_NEEDED entries. Check this rather
       # than relying on the build machine, which can satisfy accidental
