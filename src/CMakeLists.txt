@@ -62,6 +62,11 @@ if(WIN32 AND SPEK_BUILD_GUI)
         # Keep DPI awareness in the Visual Studio project as well as in the
         # manifest so MSVC, clang-cl and the IDE all use the same setting.
         set_property(TARGET spek PROPERTY VS_DPI_AWARE "PerMonitor")
+        target_sources(spek PRIVATE "${PROJECT_SOURCE_DIR}/src/app.manifest")
+        # Do not also embed RT_MANIFEST from spek.rc: VS_DPI_AWARE and the
+        # manifest tool already produce one resource for this executable.
+        set_property(SOURCE "${PROJECT_SOURCE_DIR}/dist/win/spek.rc"
+            APPEND PROPERTY COMPILE_DEFINITIONS SPEK_EXTERNAL_MANIFEST)
     endif()
 endif()
 
