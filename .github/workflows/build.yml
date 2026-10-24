@@ -17,9 +17,9 @@
 # binaries (which double as the command line tool and as the graphical
 # application) as workflow artefacts.
 #
-# macOS uses Homebrew. Windows and the self-contained Linux builds use vcpkg:
-# the standard Linux triplets already build static libraries. See vcpkg.json
-# and INSTALL.md.
+# macOS uses Homebrew. Windows and the self-contained Linux builds use vcpkg.
+# The Linux overlay triplets also build the X11 stack statically instead of
+# picking up shared libraries from the runner. See vcpkg.json and INSTALL.md.
 
 name: Build
 
@@ -53,24 +53,24 @@ jobs:
             compiler: g++-13
             cc: gcc-13
             cxx: g++-13
-            triplet: x64-linux
-            cache_id: x64-linux-gcc13
+            triplet: x64-linux-static
+            cache_id: x64-linux-static-gcc13
             artifact: spek-cli-gui-ubuntu
           - os: ubuntu-latest
             name: ubuntu-latest (GCC 14)
             compiler: g++-14
             cc: gcc-14
             cxx: g++-14
-            triplet: x64-linux
-            cache_id: x64-linux-gcc14
+            triplet: x64-linux-static
+            cache_id: x64-linux-static-gcc14
             artifact: spek-cli-gui-ubuntu-gcc14
           - os: ubuntu-24.04-arm
             name: ubuntu-24.04-arm (GCC 13)
             compiler: g++-13
             cc: gcc-13
             cxx: g++-13
-            triplet: arm64-linux
-            cache_id: arm64-linux-gcc13
+            triplet: arm64-linux-static
+            cache_id: arm64-linux-static-gcc13
             artifact: spek-cli-gui-linux-aarch64
           - os: macos-latest
             name: macos-latest (Apple Clang)
@@ -150,7 +150,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'packaging/vcpkg/**') }}
           restore-keys: |
             vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-
 
@@ -313,7 +313,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'packaging/vcpkg/**') }}
 
       - name: Upload the artefacts
         uses: actions/upload-artifact@v4

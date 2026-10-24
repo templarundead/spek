@@ -96,7 +96,10 @@ Add `-DVCPKG_TARGET_TRIPLET=x64-windows-static` to link wxWidgets, FFmpeg and
 the runtime library statically: the result is a single `spek.exe` with no DLL
 next to it, which is how the `spek-cli-gui-windows-static` artefact is built.
 
-On Linux, use `-DVCPKG_TARGET_TRIPLET=x64-linux -DSPEK_STATIC_LINK=ON` (or the
-`arm64-linux` triplet on aarch64). This links the executable, wxWidgets,
-FFmpeg, their dependencies and the compiler runtimes statically, without
-relying on the shared libraries installed on the build machine.
+On Linux, use `-DVCPKG_TARGET_TRIPLET=x64-linux-static -DSPEK_STATIC_LINK=ON`
+(or the `arm64-linux-static` triplet on aarch64). These repository overlay
+triplets also build the X11 libraries statically. Together with the overlay
+ports in `packaging/vcpkg`, they link the executable, wxWidgets, FFmpeg, their
+dependencies and the compiler runtimes statically, without relying on shared
+libraries installed on the build machine. The required compiler and build-time
+headers are listed in `.github/workflows/build.yml`.

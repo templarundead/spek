@@ -14,6 +14,55 @@
         "swresample"
       ]
     },
+    {
+      "name": "dbus",
+      "default-features": false,
+      "platform": "linux"
+    },
+    {
+      "name": "libx11",
+      "platform": "linux"
+    },
+    {
+      "name": "libxcomposite",
+      "platform": "linux"
+    },
+    {
+      "name": "libxcursor",
+      "platform": "linux"
+    },
+    {
+      "name": "libxdamage",
+      "platform": "linux"
+    },
+    {
+      "name": "libxext",
+      "platform": "linux"
+    },
+    {
+      "name": "libxfixes",
+      "platform": "linux"
+    },
+    {
+      "name": "libxi",
+      "platform": "linux"
+    },
+    {
+      "name": "libxkbcommon",
+      "platform": "linux"
+    },
+    {
+      "name": "libxrandr",
+      "platform": "linux"
+    },
+    {
+      "name": "libxrender",
+      "platform": "linux"
+    },
+    {
+      "name": "libxtst",
+      "platform": "linux"
+    },
     "wxwidgets",
     "zlib"
   ],
