@@ -56,12 +56,6 @@ else()
     set(OS_UNIX TRUE)
 endif()
 
-if(MSVC AND (VCPKG_CRT_LINKAGE STREQUAL "static" OR VCPKG_TARGET_TRIPLET MATCHES "-static"))
-    # vcpkg builds the packages of a static triplet with the static runtime
-    # library, and mixing the two runtimes does not link.
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-endif()
-
 # Threads are used by the pipeline and by the batch mode of the CLI.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)

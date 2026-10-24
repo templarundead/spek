@@ -151,15 +151,20 @@ foreach(component IN LISTS FFmpeg_ALL_COMPONENTS)
     if(FFmpeg_${component}_INCLUDE_DIR AND FFmpeg_${component}_LIBRARY)
         set(FFmpeg_${component}_FOUND TRUE)
 
-        # The libraries which have to be linked along with this one.
+        # The libraries which have to be linked along with this one. The
+        # vcpkg toolchain file does not define VCPKG_LIBRARY_LINKAGE, so the
+        # triplet name is checked as well.
         set(FFmpeg_${component}_EXTRA_LIBRARIES "")
-        if(FFmpeg_USE_STATIC_LIBS OR VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+        if(FFmpeg_USE_STATIC_LIBS OR VCPKG_LIBRARY_LINKAGE STREQUAL "static"
+           OR VCPKG_TARGET_TRIPLET MATCHES "static")
             if(PC_FFmpeg_${component}_FOUND)
                 list(APPEND FFmpeg_${component}_EXTRA_LIBRARIES
                     ${PC_FFmpeg_${component}_STATIC_LINK_LIBRARIES}
                 )
-            elseif(WIN32)
-                # No pkg-config on Windows, name the system libraries by hand.
+            endif()
+            if(WIN32)
+                # pkg-config on Windows does not list the system libraries,
+                # so name them by hand.
                 list(APPEND FFmpeg_${component}_EXTRA_LIBRARIES
                     ${FFmpeg_WINDOWS_SYSTEM_LIBRARIES}
                 )
