@@ -23,3 +23,6 @@
 
 // The graphical interface is compiled in and can be started.
 #cmakedefine01 SPEK_BUILD_GUI
+
+// Link without shared-library dependencies on Linux.
+#cmakedefine01 SPEK_STATIC_LINK

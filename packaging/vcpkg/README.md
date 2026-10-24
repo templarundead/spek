@@ -7,8 +7,9 @@ pkg-config interface. That is not sufficient for an executable linked with
 
 - `triplets/x64-linux-static.cmake` and `arm64-linux-static.cmake` enable
   vcpkg's X11 ports with `X_VCPKG_FORCE_VCPKG_X_LIBRARIES`.
-- `ports/wxwidgets` is the baseline 3.2.7 port with static GTK transitive
-  dependencies selected when `BUILD_SHARED_LIBS=OFF`.
+- `ports/wxwidgets` is the 3.3.3 port with static GTK transitive dependencies
+  selected when `BUILD_SHARED_LIBS=OFF`. It also provides native dark-mode
+  support on Windows.
 - `ports/dbus` is the baseline 1.16.2#1 port with support for vcpkg's
   `BUILD_SHARED_LIBS` setting instead of an unconditional shared library. Its
   pkg-config file also carries the optional libsystemd static link interface.

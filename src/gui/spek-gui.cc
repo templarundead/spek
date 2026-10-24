@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -187,5 +188,11 @@ void SpekApp::MacOpenFiles(const wxArrayString& files)
 
 int spek_run_gui(int argc, char **argv)
 {
+#if defined(OS_UNIX) && SPEK_STATIC_LINK
+    // Spek draws through wxDC and does not create an OpenGL canvas. Prevent
+    // GTK's startup GLX probe from dlopen()ing the host's Mesa/LLVM stack into
+    // a fully static process, which can crash in LLVM's initialisers.
+    setenv("GDK_GL", "disable", 1);
+#endif
     return wxEntry(argc, argv);
 }
