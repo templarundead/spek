@@ -63,26 +63,33 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     )
 endif()
 
+option(SPEK_NATIVE_OPTIMIZATIONS
+    "Use host-specific CPU instructions in Release builds (not portable)" OFF)
+
 if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     # Keep the optimisation deliberately scoped to Release; Debug remains
     # suitable for breakpoints and RelWithDebInfo keeps its normal settings.
+    # Native instructions are opt-in: binaries distributed to other machines
+    # must not inherit the CI runner's ISA (which can cause SIGILL).
     add_compile_options($<$<CONFIG:Release>:-O3>)
 
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" SPEK_SYSTEM_PROCESSOR)
-    if(SPEK_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
-        set(SPEK_NATIVE_CPU_FLAG "-mcpu=native")
-        # AArch64 includes NEON in the base architecture. The 32-bit-only
-        # -mfpu=neon option is rejected by AArch64 GCC and Clang.
-    else()
-        set(SPEK_NATIVE_CPU_FLAG "-march=native")
-    endif()
+    if(SPEK_NATIVE_OPTIMIZATIONS)
+        string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" SPEK_SYSTEM_PROCESSOR)
+        if(SPEK_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+            set(SPEK_NATIVE_CPU_FLAG "-mcpu=native")
+            # AArch64 includes NEON in the base architecture. The 32-bit-only
+            # -mfpu=neon option is rejected by AArch64 GCC and Clang.
+        else()
+            set(SPEK_NATIVE_CPU_FLAG "-march=native")
+        endif()
 
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("${SPEK_NATIVE_CPU_FLAG}" SPEK_HAS_NATIVE_CPU_FLAG)
-    if(SPEK_HAS_NATIVE_CPU_FLAG)
-        add_compile_options($<$<CONFIG:Release>:${SPEK_NATIVE_CPU_FLAG}>)
-    else()
-        message(WARNING "Native CPU flag ${SPEK_NATIVE_CPU_FLAG} is not supported; using portable code")
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("${SPEK_NATIVE_CPU_FLAG}" SPEK_HAS_NATIVE_CPU_FLAG)
+        if(SPEK_HAS_NATIVE_CPU_FLAG)
+            add_compile_options($<$<CONFIG:Release>:${SPEK_NATIVE_CPU_FLAG}>)
+        else()
+            message(WARNING "Native CPU flag ${SPEK_NATIVE_CPU_FLAG} is not supported; using portable code")
+        endif()
     endif()
 
     # Strip both linked Release artifacts and explicitly installed files.
@@ -235,4 +242,5 @@ message(STATUS "    FFmpeg:            ${FFmpeg_VERSION}")
 message(STATUS "    zlib:              ${ZLIB_FOUND}")
 message(STATUS "    libintl:           ${Intl_FOUND}")
 message(STATUS "    Graphical UI:      ${SPEK_BUILD_GUI}")
+message(STATUS "    Native CPU opts:   ${SPEK_NATIVE_OPTIMIZATIONS}")
 message(STATUS "")

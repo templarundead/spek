@@ -554,6 +554,11 @@ std::string process_file(
 
 bool wants_cli(int argc, char **argv)
 {
+    // A no-argument invocation is a console help request, not a GUI launch.
+    if (argc == 1) {
+        return true;
+    }
+
     // Keep this list in sync with parse_options(). Every console-only option,
     // not just --cli itself, must bypass wxEntry(): otherwise a valid headless
     // command such as `spek --input=file --output=image.png` starts wxGTK.
@@ -586,6 +591,11 @@ bool wants_cli(int argc, char **argv)
 
 int run_cli(int argc, char **argv)
 {
+    if (argc == 1) {
+        print_usage(std::cout);
+        return 0;
+    }
+
     // FFmpeg is very chatty about the formats it has to guess, only report
     // the real errors.
     av_log_set_level(AV_LOG_ERROR);

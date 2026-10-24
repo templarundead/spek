@@ -187,6 +187,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$SPEK_VCPKG_TOOLCHAIN" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DSPEK_BUILD_TESTS=ON \
+            -DSPEK_NATIVE_OPTIMIZATIONS=OFF \
             -DSPEK_STATIC_LINK=ON 2>&1 | tee configure.log
 
       - name: Configure (macOS)
@@ -199,6 +200,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_PREFIX_PATH="$(brew --prefix);$(brew --prefix)/opt/gettext"
           -DSPEK_BUILD_TESTS=ON
+          -DSPEK_NATIVE_OPTIMIZATIONS=OFF
 
       # The runner image ships vcpkg, but its location is only announced
       # through an environment variable.
@@ -223,7 +225,8 @@ jobs:
           cmake -B build -S . -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:SPEK_VCPKG_TOOLCHAIN" `
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
-            -DSPEK_BUILD_TESTS=ON *> configure.log
+            -DSPEK_BUILD_TESTS=ON `
+            -DSPEK_NATIVE_OPTIMIZATIONS=OFF *> configure.log
 
       # --config is what the multi-configuration generators need, the
       # single-configuration ones ignore it.
@@ -296,6 +299,8 @@ jobs:
             env -u DISPLAY -u WAYLAND_DISPLAY -u XAUTHORITY "$@"
           }
           run_headless ./build/src/spek --version
+          run_headless ./build/src/spek > build/no-args-help.txt
+          grep -q "Usage:" build/no-args-help.txt
           run_headless ./build/src/spek --cli --version
           run_headless ./build/src/spek -c --version
           run_headless ./build/src/spek --cli --input tests/samples --output build/spectrograms --width 100
@@ -328,6 +333,10 @@ jobs:
               -NoNewWindow -Wait -PassThru
           if ($version.ExitCode -ne 0) {
               throw "--version exited with code $($version.ExitCode)"
+          }
+          $noArgs = Start-Process -FilePath $exe -NoNewWindow -Wait -PassThru
+          if ($noArgs.ExitCode -ne 0) {
+              throw "No-argument help exited with code $($noArgs.ExitCode)"
           }
           $cli = Start-Process -FilePath $exe `
               -ArgumentList '--cli --input tests/samples --output build/spectrograms --width 100' `

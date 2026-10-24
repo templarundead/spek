@@ -72,9 +72,10 @@ Spek - Acoustic Spectrum Analyser
 
 # BATCH PROCESSING
 
-Without `--cli` *Spek* opens the graphical interface. When `--cli` (or
-`--input`) is given, *Spek* analyses the files and saves the spectrograms as
-PNG images without opening a window:
+With no arguments *Spek* prints the command-line help and exits. With a file
+argument and without `--cli`, *Spek* opens the graphical interface. When
+`--cli` (or `--input`) is given, *Spek* analyses the files and saves the
+spectrograms as PNG images without opening a window:
 
     spek --cli --input song.flac --output song.png
     spek --cli --full-image --input song.flac --output song-full.png

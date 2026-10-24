@@ -55,9 +55,10 @@ void attach_parent_console()
 int main(int argc, char **argv)
 {
     // Select the execution mode before doing anything which could initialize
-    // wxWidgets. In particular, the CLI must not call wxInitialize(): this is
-    // a wxGTK build and even base-module initialization is unnecessary for the
-    // toolkit-independent analysis pipeline.
+    // wxWidgets. No-argument help and the CLI deliberately use no wxApp at
+    // all: this is stricter than wxAppConsole and cannot require DISPLAY on
+    // a wxGTK build. The analysis pipeline and full-image renderer are both
+    // toolkit-independent.
 #if SPEK_BUILD_GUI
     const bool use_cli = spek::wants_cli(argc, argv);
 #ifdef OS_WIN

@@ -78,7 +78,13 @@ On macOS with Homebrew:
 | `SPEK_ENABLE_NLS`     | `ON`    | Enable the translations.                        |
 | `SPEK_INSTALL`        | `ON`    | Generate the installation rules.                |
 | `SPEK_STATIC_LINK`    | `OFF`   | Link a self-contained static Linux executable.  |
+| `SPEK_NATIVE_OPTIMIZATIONS` | `OFF` | Use host-specific CPU instructions in Release builds; not portable. |
 | `CMAKE_BUILD_TYPE`    | `Release` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
+
+Keep `SPEK_NATIVE_OPTIMIZATIONS=OFF` for binaries that will run on another
+computer. When enabled for a local build, it selects `-march=native` (or
+`-mcpu=native` on AArch64), which can otherwise cause an illegal-instruction
+crash on an older CPU.
 
 #### Building with vcpkg
 
