@@ -107,10 +107,17 @@ jobs:
             cmake \
             gettext \
             gperf \
+            libegl1-mesa-dev \
             libgl1-mesa-dev \
             libglu1-mesa-dev \
+            libibus-1.0-dev \
             libltdl-dev \
             libtool \
+            libwayland-dev \
+            libx11-dev \
+            libxext-dev \
+            libxft-dev \
+            libxkbcommon-dev \
             nasm \
             ninja-build \
             pkg-config \
