@@ -63,6 +63,11 @@ Number of files to analyse in parallel.
 .TP
 \f[B]\f[CB]-q\f[B]\f[R], \f[B]\f[CB]--quiet\f[B]\f[R]
 Do not print the progress information.
+.TP
+\f[B]\f[CB]--full-image\f[B]\f[R]
+Include the file name, stream metadata, time and frequency rulers,
+spectral-density scale and palette in the saved image. The option works
+without a display server.
 .SH BATCH PROCESSING
 .PP
 Without \f[C]--cli\f[R] \f[I]Spek\f[R] opens the graphical interface.
@@ -73,6 +78,7 @@ window:
 .nf
 \f[C]
 spek --cli --input song.flac --output song.png
+spek --cli --full-image --input song.flac --output song-full.png
 spek --cli --input ~/Music --output spectrograms --recursive --jobs 4
 \f[R]
 .fi

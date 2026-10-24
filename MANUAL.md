@@ -67,6 +67,9 @@ Spek - Acoustic Spectrum Analyser
 `-q`, `--quiet`
 :   Do not print the progress information.
 
+`--full-image`
+:   Include the file name, stream metadata, time and frequency rulers, spectral-density scale and palette in the saved image. The option works without a display server.
+
 # BATCH PROCESSING
 
 Without `--cli` *Spek* opens the graphical interface. When `--cli` (or
@@ -74,6 +77,7 @@ Without `--cli` *Spek* opens the graphical interface. When `--cli` (or
 PNG images without opening a window:
 
     spek --cli --input song.flac --output song.png
+    spek --cli --full-image --input song.flac --output song-full.png
     spek --cli --input '~/Music' --output spectrograms --recursive --jobs 4
 
 When the input is a directory, every file with a known audio extension is

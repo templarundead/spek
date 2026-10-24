@@ -63,6 +63,33 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     )
 endif()
 
+if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # Keep the optimisation deliberately scoped to Release; Debug remains
+    # suitable for breakpoints and RelWithDebInfo keeps its normal settings.
+    add_compile_options($<$<CONFIG:Release>:-O3>)
+
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" SPEK_SYSTEM_PROCESSOR)
+    if(SPEK_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(SPEK_NATIVE_CPU_FLAG "-mcpu=native")
+        # AArch64 includes NEON in the base architecture. The 32-bit-only
+        # -mfpu=neon option is rejected by AArch64 GCC and Clang.
+    else()
+        set(SPEK_NATIVE_CPU_FLAG "-march=native")
+    endif()
+
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("${SPEK_NATIVE_CPU_FLAG}" SPEK_HAS_NATIVE_CPU_FLAG)
+    if(SPEK_HAS_NATIVE_CPU_FLAG)
+        add_compile_options($<$<CONFIG:Release>:${SPEK_NATIVE_CPU_FLAG}>)
+    else()
+        message(WARNING "Native CPU flag ${SPEK_NATIVE_CPU_FLAG} is not supported; using portable code")
+    endif()
+
+    # Strip both linked Release artifacts and explicitly installed files.
+    add_link_options($<$<CONFIG:Release>:-s>)
+    set(CMAKE_INSTALL_DO_STRIP TRUE)
+endif()
+
 option(SPEK_BUILD_GUI "Build the wxWidgets graphical interface" ON)
 option(SPEK_BUILD_TESTS "Build the test suite" ON)
 option(SPEK_ENABLE_NLS "Enable translations" ON)

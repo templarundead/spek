@@ -54,5 +54,6 @@ template<class T> void test_near(
 
 void test_audio();
 void test_fft();
+void test_full_image();
 void test_pipeline();
 void test_utils();

@@ -224,6 +224,28 @@ int SpekSpectrogram::plot_width() const
     return this->calculate_layout(dc, fonts, GetClientSize()).width;
 }
 
+wxSize SpekSpectrogram::DoGetBestClientSize() const
+{
+    wxBitmap bitmap(1, 1);
+    wxMemoryDC dc(bitmap);
+    const Fonts fonts = this->create_fonts(dc);
+    const Layout layout = this->calculate_layout(dc, fonts, wxSize(0, 0));
+
+    dc.SetFont(fonts.large);
+    const int name_width = dc.GetTextExtent(this->path).GetWidth();
+    dc.SetFont(fonts.normal);
+    const int desc_width = dc.GetTextExtent(this->desc).GetWidth();
+
+    // The sizer can now ask for enough room for the complete file name. The
+    // frame only grows, so opening a short file never undoes a user's resize.
+    const int min_plot = this->FromDIP(100);
+    const int plot_width = std::max({min_plot, name_width, desc_width});
+    return wxSize(
+        layout.lpad + plot_width + layout.rpad,
+        layout.tpad + min_plot + layout.bpad
+    );
+}
+
 void SpekSpectrogram::on_char(wxKeyEvent& evt)
 {
     switch (evt.GetKeyCode()) {

@@ -60,29 +60,16 @@ SpekPreferences::SpekPreferences() :
 
 SpekPreferences::~SpekPreferences() = default;
 
-bool SpekPreferences::get_check_update()
+bool SpekPreferences::get_show_toolbar()
 {
     bool result = true;
-    this->config->Read("/update/check", &result);
+    this->config->Read("/general/show_toolbar", &result);
     return result;
 }
 
-void SpekPreferences::set_check_update(bool value)
+void SpekPreferences::set_show_toolbar(bool value)
 {
-    this->config->Write("/update/check", value);
-    this->config->Flush();
-}
-
-long SpekPreferences::get_last_update()
-{
-    long result = 0;
-    this->config->Read("/update/last", &result);
-    return result;
-}
-
-void SpekPreferences::set_last_update(long value)
-{
-    this->config->Write("/update/last", value);
+    this->config->Write("/general/show_toolbar", value);
     this->config->Flush();
 }
 
