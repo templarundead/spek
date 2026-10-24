@@ -38,9 +38,6 @@ extern "C" {
 
 #include "spek-gui.h"
 
-namespace
-{
-
 class SpekApp : public wxApp
 {
 public:
@@ -59,6 +56,14 @@ private:
     bool quit = false;
 };
 
+// Keep wx's application factory and entry-point machinery in its canonical
+// form. The actual main() remains ours so help and CLI dispatch can happen
+// before any GUI initialization.
+wxIMPLEMENT_APP_NO_MAIN(SpekApp);
+
+namespace
+{
+
 // The core library knows nothing about wxWidgets, so it asks the application
 // to translate its strings. Route the requests to wx, which loads the
 // catalogue set up by SpekPreferences.
@@ -76,18 +81,7 @@ std::string wx_translate_plural(const char *msgid, const char *msgid_plural, uns
     ).utf8_str());
 }
 
-wxAppConsole *create_app()
-{
-    wxAppConsole::CheckBuildOptions(WX_BUILD_OPTIONS_SIGNATURE, "Spek");
-    return new SpekApp;
-}
-
 } // namespace
-
-// Do not use wxIMPLEMENT_APP_NO_MAIN() here. That macro creates a global
-// wxAppInitializer, which calls into wx before main() and before the static
-// wxGTK support has a well-defined initialization order. The initializer is
-// installed explicitly at the beginning of spek_run_gui() instead.
 
 bool SpekApp::OnInit()
 {
@@ -203,8 +197,6 @@ int spek_run_gui(int argc, char **argv)
     setenv("GDK_GL", "disable", 1);
 #endif
 
-    // Install this only after all static constructors have run. In particular,
-    // avoid wxAppInitializer's pre-main call into wxWidgets (see above).
-    wxApp::SetInitializerFunction(&create_app);
+    wxAppConsole::CheckBuildOptions(WX_BUILD_OPTIONS_SIGNATURE, "Spek");
     return wxEntry(argc, argv);
 }

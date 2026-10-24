@@ -72,3 +72,7 @@ processing of whole directories:
 
     spek --cli --input song.flac --output song.png
     spek --cli --input ~/Music --output spectrograms --recursive --jobs 4
+
+On Windows, use the included `spek-cli.exe` for interactive console commands;
+`cmd.exe` and PowerShell wait for it and return the prompt after the output.
+The graphical `spek.exe` remains a separate GUI-subsystem application.

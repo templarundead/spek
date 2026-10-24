@@ -68,17 +68,31 @@ Spek - Acoustic Spectrum Analyser
 :   Do not print the progress information.
 
 `--full-image`
-:   Include the file name, stream metadata, time and frequency rulers, spectral-density scale and palette in the saved image. The option works without a display server.
+:   Include the file name, stream metadata, time and frequency rulers, spectral-density scale and palette in the saved image. The option works without a display server. The complete canvas is cleared to a dark background and labels use an embedded anti-aliased TrueType font, so no system font installation or Fontconfig is required.
 
 # BATCH PROCESSING
 
-Without `--cli` *Spek* opens the graphical interface. When `--cli` (or
-`--input`) is given, *Spek* analyses the files and saves the spectrograms as
-PNG images without opening a window:
+With no arguments in a terminal *Spek* prints the command-line help and exits.
+On Windows, launching the GUI executable from Explorer without a console opens
+the graphical interface. With a file argument and without `--cli`, *Spek* opens
+the graphical interface. When
+`--cli` (or `--input`) is given, *Spek* analyses the files and saves the
+spectrograms as PNG images without opening a window:
 
     spek --cli --input song.flac --output song.png
     spek --cli --full-image --input song.flac --output song-full.png
     spek --cli --input '~/Music' --output spectrograms --recursive --jobs 4
+
+Windows packages also include `spek-cli.exe`, a console-subsystem frontend for
+interactive use from `cmd.exe` or PowerShell. The shell waits for it to finish,
+so the prompt appears after the analysis output and the normal exit status and
+redirection work as expected:
+
+    spek-cli.exe --cli --full-image --input song.flac --output song-full.png
+
+The GUI `spek.exe` remains a GUI-subsystem application. When using that
+executable for CLI work from a script, wait for it explicitly (for example,
+with `Start-Process -Wait`) or use `spek-cli.exe` instead.
 
 When the input is a directory, every file with a known audio extension is
 analysed and the images are written into the output directory (or next to the

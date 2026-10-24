@@ -33,6 +33,19 @@ void SpekImage::clear()
     this->pixels_.clear();
 }
 
+uint32_t SpekImage::pixel(int x, int y) const
+{
+    if (x < 0 || y < 0 || x >= this->width_ || y >= this->height_) {
+        return 0;
+    }
+
+    const size_t offset =
+        (static_cast<size_t>(y) * static_cast<size_t>(this->width_) + static_cast<size_t>(x)) * 3;
+    return (static_cast<uint32_t>(this->pixels_[offset]) << 16)
+        | (static_cast<uint32_t>(this->pixels_[offset + 1]) << 8)
+        | static_cast<uint32_t>(this->pixels_[offset + 2]);
+}
+
 void SpekImage::set_pixel(int x, int y, uint32_t rgb)
 {
     if (x < 0 || y < 0 || x >= this->width_ || y >= this->height_) {

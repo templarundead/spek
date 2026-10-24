@@ -162,6 +162,14 @@ SpekWindow::SpekWindow(const wxString& path) :
     const bool show_toolbar = SpekPreferences::get().get_show_toolbar();
     menu_options_show->Check(show_toolbar);
     toolbar->Show(show_toolbar);
+#ifdef OS_WIN
+    if (show_toolbar) {
+        // The native Windows toolbar calculates stretchable spacers from its
+        // current client width. Re-realize after the initial visibility
+        // change, since CreateToolBar() positioned it before tools were added.
+        toolbar->Realize();
+    }
+#endif
 
     wxSizer *sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -344,7 +352,29 @@ void SpekWindow::on_show_toolbar(wxCommandEvent& event)
 {
     const bool show = event.IsChecked();
     this->toolbar->Show(show);
+#ifdef OS_WIN
+    if (show) {
+        // A hidden native toolbar does not get the WM_SIZE which updates its
+        // stretchable space. Recalculate the buttons after showing it again.
+        this->toolbar->Realize();
+    }
+#endif
     this->Layout();
+
+    // Layout alone does not invalidate the native frame or its child on all
+    // platforms. Repaint both now so the old toolbar/plot labels cannot stay
+    // in the newly exposed area (especially with a dark background).
+    this->Refresh();
+    this->spectrogram->Refresh();
+    this->Update();
+#ifdef OS_WIN
+    // wxFrame::Update() does not reliably flush native child windows on
+    // Windows. Update them explicitly after the new layout is in place.
+    this->toolbar->Refresh();
+    this->toolbar->Update();
+    this->spectrogram->Update();
+#endif
+
     SpekPreferences::get().set_show_toolbar(show);
 }
 

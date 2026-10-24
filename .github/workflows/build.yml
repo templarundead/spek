@@ -83,7 +83,8 @@ jobs:
             cache_id: x64-windows
             artifact: spek-cli-gui-windows
           # The same Windows build with wxWidgets, FFmpeg and the runtime
-          # linked in statically: a single spek.exe which needs no DLLs.
+          # linked in statically: self-contained GUI and console executables
+          # which need no DLLs.
           - os: windows-latest
             name: windows-latest (MSVC, static)
             triplet: x64-windows-static
@@ -187,6 +188,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$SPEK_VCPKG_TOOLCHAIN" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DSPEK_BUILD_TESTS=ON \
+            -DSPEK_NATIVE_OPTIMIZATIONS=OFF \
             -DSPEK_STATIC_LINK=ON 2>&1 | tee configure.log
 
       - name: Configure (macOS)
@@ -199,6 +201,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_PREFIX_PATH="$(brew --prefix);$(brew --prefix)/opt/gettext"
           -DSPEK_BUILD_TESTS=ON
+          -DSPEK_NATIVE_OPTIMIZATIONS=OFF
 
       # The runner image ships vcpkg, but its location is only announced
       # through an environment variable.
@@ -223,7 +226,8 @@ jobs:
           cmake -B build -S . -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:SPEK_VCPKG_TOOLCHAIN" `
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
-            -DSPEK_BUILD_TESTS=ON *> configure.log
+            -DSPEK_BUILD_TESTS=ON `
+            -DSPEK_NATIVE_OPTIMIZATIONS=OFF *> configure.log
 
       # --config is what the multi-configuration generators need, the
       # single-configuration ones ignore it.
@@ -296,6 +300,8 @@ jobs:
             env -u DISPLAY -u WAYLAND_DISPLAY -u XAUTHORITY "$@"
           }
           run_headless ./build/src/spek --version
+          run_headless ./build/src/spek > build/no-args-help.txt
+          grep -q "Usage:" build/no-args-help.txt
           run_headless ./build/src/spek --cli --version
           run_headless ./build/src/spek -c --version
           run_headless ./build/src/spek --cli --input tests/samples --output build/spectrograms --width 100
@@ -329,6 +335,10 @@ jobs:
           if ($version.ExitCode -ne 0) {
               throw "--version exited with code $($version.ExitCode)"
           }
+          $noArgs = Start-Process -FilePath $exe -NoNewWindow -Wait -PassThru
+          if ($noArgs.ExitCode -ne 0) {
+              throw "No-argument help exited with code $($noArgs.ExitCode)"
+          }
           $cli = Start-Process -FilePath $exe `
               -ArgumentList '--cli --input tests/samples --output build/spectrograms --width 100' `
               -NoNewWindow -Wait -PassThru
@@ -346,6 +356,22 @@ jobs:
           }
           if (-not (Test-Path build\full-image.png -PathType Leaf)) {
               throw "Full-image CLI did not produce a PNG"
+          }
+
+          # The dedicated console-subsystem frontend is the interactive CLI
+          # contract: unlike a GUI-subsystem executable, PowerShell waits for
+          # it before displaying the next prompt. Invoke it directly rather
+          # than hiding that distinction behind Start-Process -Wait.
+          $consoleExe = (Resolve-Path .\build\src\Release\spek-cli.exe).Path
+          & $consoleExe '--cli' '--full-image' `
+              '--input' 'tests/samples/2ch-44100Hz-16bps.wav' `
+              '--output' 'build/console-full-image.png' `
+              '--width' '100' '--height' '64'
+          if ($LASTEXITCODE -ne 0) {
+              throw "Console frontend exited with code $LASTEXITCODE"
+          }
+          if (-not (Test-Path build\console-full-image.png -PathType Leaf)) {
+              throw "Console frontend did not produce a PNG"
           }
 
       - name: Smoke test the graphical interface (Linux)
@@ -425,12 +451,14 @@ jobs:
               return 1
             fi
           }
-          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          # No-argument startup is intentionally console help; pass a file
+          # to exercise the graphical entry point.
+          run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]wav$' tests/samples/2ch-44100Hz-16bps.wav
           run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
           # The reported failures were from a root shell. Exercise that user
           # and its real home directory as well, not just a fresh CI account.
           export SPEK_AS_ROOT=1
-          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
           unset SPEK_AS_ROOT
 
       # A static glibc executable can still load NSS and gconv modules from
@@ -555,6 +583,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "${{ matrix.artifact }}"
           Copy-Item build\src\Release\spek.exe -Destination "${{ matrix.artifact }}\"
+          Copy-Item build\src\Release\spek-cli.exe -Destination "${{ matrix.artifact }}\"
           Get-ChildItem -Path build\src\Release\*.dll -ErrorAction SilentlyContinue |
             Copy-Item -Destination "${{ matrix.artifact }}\"
           Get-ChildItem "${{ matrix.artifact }}"

@@ -46,6 +46,22 @@ set_target_properties(spek PROPERTIES
 )
 
 if(WIN32 AND SPEK_BUILD_GUI)
+    # Keep the GUI executable in the Windows subsystem, but provide a real
+    # console-subsystem frontend as well. cmd.exe and PowerShell wait for this
+    # executable, so its prompt cannot race the analysis output. It links only
+    # the toolkit-independent CLI/core libraries and has no wx entry point.
+    add_executable(spek-cli-app spek-cli-main.cc)
+    target_link_libraries(spek-cli-app PRIVATE spek-cli spek-core)
+    set_target_properties(spek-cli-app PROPERTIES
+        OUTPUT_NAME "spek-cli"
+        WIN32_EXECUTABLE FALSE
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+endif()
+
+if(WIN32 AND SPEK_BUILD_GUI)
     # Resource objects cannot live in a static library, so the script is
     # compiled into the executable itself. It contains the icons and the
     # explicit High-DPI manifest for every Windows resource compiler.
@@ -75,19 +91,24 @@ if(WIN32)
     # the artefacts can be used straight away.
     include(SpekCopyRuntimeDlls)
     spek_copy_runtime_dlls(spek)
+    if(TARGET spek-cli-app)
+        spek_copy_runtime_dlls(spek-cli-app)
+    endif()
 endif()
 
 if(WIN32 AND SPEK_BUILD_GUI)
     # Do not create a console window for normal GUI startup. Command-line
-    # modes attach to the parent console explicitly in spek-main.cc.
+    # modes attach to the parent console explicitly in spek-main.cc. The
+    # native WinMain wrapper lets the linker select the normal GUI CRT entry
+    # point instead of forcing mainCRTStartup.
     set_target_properties(spek PROPERTIES WIN32_EXECUTABLE TRUE)
-    if(MSVC)
-        # Keep the existing main() entry point while using the Windows GUI
-        # subsystem. The CRT still performs normal startup and exit handling.
-        target_link_options(spek PRIVATE "/ENTRY:mainCRTStartup")
-    endif()
+    # CommandLineToArgvW() is used by that wrapper to preserve Unicode paths.
+    target_link_libraries(spek PRIVATE shell32)
 endif()
 
 if(SPEK_INSTALL)
     install(TARGETS spek RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    if(TARGET spek-cli-app)
+        install(TARGETS spek-cli-app RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    endif()
 endif()

@@ -7,7 +7,10 @@ install Spek, download the MSI installer, double-click it and follow the
 instructions.
 
 If you don't want to use the installer, you can download the ZIP archive, unpack
-it somewhere on your disk and run `Spek\spek.exe`.
+it somewhere on your disk and run `Spek\spek.exe`. For interactive command-line
+analysis from `cmd.exe` or PowerShell, use the included `Spek\spek-cli.exe`:
+it is a console application, so the shell waits for the analysis and returns
+its prompt after the output. The GUI `spek.exe` does not open a console window.
 
 ## Mac OS X
 
@@ -60,6 +63,11 @@ Or install it with:
  * [gettext](https://www.gnu.org/software/gettext/) (optional, for the
    translations)
 
+The `--full-image` renderer embeds its anti-aliased Spek Sans font (a Noto
+Sans subset) and does not require DejaVu, Liberation, Fontconfig or an X server
+on a headless machine. Its licence is included in `lic/Noto`; the embedded
+`stb_truetype` rasterizer is covered by `lic/stb`.
+
 On Debian/Ubuntu:
 
     sudo apt-get install cmake libwxgtk3.2-dev libavcodec-dev libavformat-dev \
@@ -78,7 +86,13 @@ On macOS with Homebrew:
 | `SPEK_ENABLE_NLS`     | `ON`    | Enable the translations.                        |
 | `SPEK_INSTALL`        | `ON`    | Generate the installation rules.                |
 | `SPEK_STATIC_LINK`    | `OFF`   | Link a self-contained static Linux executable.  |
+| `SPEK_NATIVE_OPTIMIZATIONS` | `OFF` | Use host-specific CPU instructions in Release builds; not portable. |
 | `CMAKE_BUILD_TYPE`    | `Release` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
+
+Keep `SPEK_NATIVE_OPTIMIZATIONS=OFF` for binaries that will run on another
+computer. When enabled for a local build, it selects `-march=native` (or
+`-mcpu=native` on AArch64), which can otherwise cause an illegal-instruction
+crash on an older CPU.
 
 #### Building with vcpkg
 
@@ -93,8 +107,9 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) uses vcpkg on
 Windows and for the self-contained Linux binaries.
 
 Add `-DVCPKG_TARGET_TRIPLET=x64-windows-static` to link wxWidgets, FFmpeg and
-the runtime library statically: the result is a single `spek.exe` with no DLL
-next to it, which is how the `spek-cli-gui-windows-static` artefact is built.
+the runtime library statically: the result contains self-contained `spek.exe`
+and `spek-cli.exe` with no DLLs next to them, which is how the
+`spek-cli-gui-windows-static` artefact is built.
 
 On Linux, use `-DVCPKG_TARGET_TRIPLET=x64-linux-static -DSPEK_STATIC_LINK=ON`
 (or the `arm64-linux-static` triplet on aarch64). These repository overlay
