@@ -54,3 +54,17 @@ if(WIN32)
     include(SpekCopyRuntimeDlls)
     spek_copy_runtime_dlls(spek-test)
 endif()
+
+if(UNIX AND NOT APPLE AND SPEK_BUILD_GUI)
+    # Link the same wxGTK stack as the application. The global in this test
+    # runs before main(), covering a failure mode which a normal GUI smoke
+    # test cannot reliably expose on every linker/architecture combination.
+    add_executable(spek-static-init-test test-static-init.cc)
+    target_link_libraries(spek-static-init-test PRIVATE spek-gui)
+    set_target_properties(spek-static-init-test PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    add_test(NAME spek-static-init-test COMMAND spek-static-init-test)
+endif()
