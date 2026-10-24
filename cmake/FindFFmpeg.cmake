@@ -157,9 +157,12 @@ foreach(component IN LISTS FFmpeg_ALL_COMPONENTS)
         set(FFmpeg_${component}_EXTRA_LIBRARIES "")
         if(FFmpeg_USE_STATIC_LIBS OR VCPKG_LIBRARY_LINKAGE STREQUAL "static"
            OR VCPKG_TARGET_TRIPLET MATCHES "static")
-            if(PC_FFmpeg_${component}_FOUND)
+            if(PC_FFmpeg_${component}_FOUND AND NOT WIN32)
+                # FindPkgConfig has no STATIC_LINK_LIBRARIES variant. The
+                # static LDFLAGS include the complete private link interface
+                # in the order required by static archives.
                 list(APPEND FFmpeg_${component}_EXTRA_LIBRARIES
-                    ${PC_FFmpeg_${component}_STATIC_LINK_LIBRARIES}
+                    ${PC_FFmpeg_${component}_STATIC_LDFLAGS}
                 )
             endif()
             if(WIN32)

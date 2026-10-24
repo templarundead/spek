@@ -14,8 +14,8 @@ diff --git a/build/cmake/modules/FindGTK3.cmake b/build/cmake/modules/FindGTK3.c
 +set(GTK3_LIBRARIES "${GTK3_LINK_LIBRARIES}" CACHE INTERNAL "")
 +else()
 +# Static GTK archives need their complete private pkg-config link interface.
-+list(REMOVE_ITEM GTK3_STATIC_LINK_LIBRARIES ${cxx_libs})
-+set(GTK3_LIBRARIES "${GTK3_STATIC_LINK_LIBRARIES}" CACHE INTERNAL "")
++list(REMOVE_ITEM GTK3_STATIC_LDFLAGS ${cxx_libs})
++set(GTK3_LIBRARIES "${GTK3_STATIC_LDFLAGS}" CACHE INTERNAL "")
 +endif()
  include(FindPackageHandleStandardArgs)
  FIND_PACKAGE_HANDLE_STANDARD_ARGS(GTK3 DEFAULT_MSG GTK3_INCLUDE_DIRS GTK3_LIBRARIES VERSION_OK)
