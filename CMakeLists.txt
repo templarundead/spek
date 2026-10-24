@@ -135,12 +135,6 @@ else()
     set(SPEK_HAVE_INTL 0)
 endif()
 
-if(SPEK_BUILD_GUI)
-    set(SPEK_BUILD_GUI_VALUE 1)
-else()
-    set(SPEK_BUILD_GUI_VALUE 0)
-endif()
-
 set(SPEK_PROGRAM_NAME "spek")
 set(SPEK_GETTEXT_PACKAGE "spek")
 set(SPEK_LOCALE_DIR "${CMAKE_INSTALL_FULL_LOCALEDIR}")

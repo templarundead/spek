@@ -266,6 +266,36 @@ jobs:
           .\build\src\Release\spek.exe --version
           .\build\src\Release\spek.exe --cli --input tests/samples --output build/spectrograms --width 100
 
+      # Exercise the other entry point as well: without --cli the same
+      # executable must create its wxWidgets window instead of exiting after
+      # processing command-line options. This also catches a GUI accidentally
+      # compiled out of an otherwise successful Windows build.
+      - name: Smoke test the graphical interface (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $process = Start-Process -FilePath .\build\src\Release\spek.exe -PassThru
+          try {
+              $shown = $false
+              for ($i = 0; $i -lt 30; ++$i) {
+                  Start-Sleep -Milliseconds 500
+                  $process.Refresh()
+                  if ($process.HasExited) {
+                      throw "The GUI exited prematurely with code $($process.ExitCode)"
+                  }
+                  if ($process.MainWindowHandle -ne 0) {
+                      $shown = $true
+                      break
+                  }
+              }
+              if (-not $shown) {
+                  throw "The GUI did not create a window within 15 seconds"
+              }
+          } finally {
+              if (-not $process.HasExited) {
+                  Stop-Process -Id $process.Id -Force
+              }
+          }
+
       # A fully static executable has no DT_NEEDED entries. Check this rather
       # than relying on the build machine, which can satisfy accidental
       # dynamic dependencies from its system directories.

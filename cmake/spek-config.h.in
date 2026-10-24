@@ -22,4 +22,4 @@
 #cmakedefine01 SPEK_HAVE_ZLIB
 
 // The graphical interface is compiled in and can be started.
-#cmakedefine01 SPEK_BUILD_GUI_VALUE
+#cmakedefine01 SPEK_BUILD_GUI
