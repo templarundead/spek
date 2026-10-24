@@ -444,6 +444,19 @@ jobs:
               if (-not $shown) {
                   throw "The GUI did not open the audio file within 15 seconds"
               }
+              # Close through WM_CLOSE rather than killing the process. This
+              # verifies that the GUI really exits (and does not leave the
+              # caller observing STILL_ACTIVE / exit code 259).
+              if (-not $process.CloseMainWindow()) {
+                  throw "The GUI did not accept a close request"
+              }
+              if (-not $process.WaitForExit(10000)) {
+                  throw "The GUI did not exit within 10 seconds of closing"
+              }
+              $process.Refresh()
+              if ($process.ExitCode -ne 0) {
+                  throw "The GUI exited with code $($process.ExitCode)"
+              }
           } finally {
               if (-not $process.HasExited) {
                   Stop-Process -Id $process.Id -Force

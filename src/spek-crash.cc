@@ -39,9 +39,27 @@ void report_fatal_signal(int signal_number)
     }
     handling_signal = 1;
 
-    static constexpr char prefix[] =
-        "\nSpek: fatal signal during startup or execution; backtrace follows.\n";
+    static constexpr char prefix[] = "\nSpek: fatal signal (";
     write_message(prefix, sizeof(prefix) - 1);
+    static constexpr char unknown[] = "unknown";
+    static constexpr char sigfpe[] = "SIGFPE";
+    static constexpr char sigsegv[] = "SIGSEGV";
+    static constexpr char sigbus[] = "SIGBUS";
+    const char *name = unknown;
+    size_t name_length = sizeof(unknown) - 1;
+    if (signal_number == SIGFPE) {
+        name = sigfpe;
+        name_length = sizeof(sigfpe) - 1;
+    } else if (signal_number == SIGSEGV) {
+        name = sigsegv;
+        name_length = sizeof(sigsegv) - 1;
+    } else if (signal_number == SIGBUS) {
+        name = sigbus;
+        name_length = sizeof(sigbus) - 1;
+    }
+    write_message(name, name_length);
+    static constexpr char middle[] = ") during startup or execution; backtrace follows.\n";
+    write_message(middle, sizeof(middle) - 1);
 
     void *frames[64];
     const int count = backtrace(frames, static_cast<int>(sizeof(frames) / sizeof(frames[0])));
