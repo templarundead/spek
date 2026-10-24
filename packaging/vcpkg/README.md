@@ -16,6 +16,9 @@ pkg-config interface. That is not sufficient for an executable linked with
   layer, so a static consumer must not inherit the build host's shared GL/EGL.
 - `ports/libxcursor` supplies Xcursor 1.2.3, which is absent from the pinned
   baseline. The source commit and archive hash are pinned in its portfile.
+- `ports/sdl2` preseeds the generic-events check for static Linux: SDL's probe
+  names `libX11.a` without its XCB dependencies, although the baseline X11
+  provides that API.
 
 The overlays are also read by Windows builds, but their Linux-only ports and
 conditions leave the existing Windows dependency configuration unchanged.
