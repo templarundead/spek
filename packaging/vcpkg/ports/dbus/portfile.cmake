@@ -12,6 +12,7 @@ vcpkg_from_gitlab(
         getpeereid.patch # missing check from configure.ac
         libsystemd.patch
         remove-path.patch
+        static-pkgconfig.patch
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS options

@@ -10,3 +10,15 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
  
  set(INSTALL_TARGETS_DEFAULT_ARGS EXPORT DBus1Targets RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
  
+diff --git a/dbus/CMakeLists.txt b/dbus/CMakeLists.txt
+--- a/dbus/CMakeLists.txt
++++ b/dbus/CMakeLists.txt
+@@ -263,7 +263,7 @@
+ find_library(LIBSOCKET socket)
+ 
+ ### Client library
+-add_library(dbus-1 SHARED
++add_library(dbus-1
+     ${libdbus_SOURCES}
+     ${libdbus_HEADERS}
+ )

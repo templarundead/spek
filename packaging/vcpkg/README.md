@@ -10,9 +10,10 @@ pkg-config interface. That is not sufficient for an executable linked with
 - `ports/wxwidgets` is the baseline 3.2.7 port with static GTK transitive
   dependencies selected when `BUILD_SHARED_LIBS=OFF`.
 - `ports/dbus` is the baseline 1.16.2#1 port with support for vcpkg's
-  `BUILD_SHARED_LIBS` setting instead of an unconditional shared library.
-- `ports/libepoxy` is the baseline 1.5.10#2 port without GL/EGL in
-  `Requires.private`: epoxy resolves those entry points through its dispatch
+  `BUILD_SHARED_LIBS` setting instead of an unconditional shared library. Its
+  pkg-config file also carries the optional libsystemd static link interface.
+- `ports/libepoxy` is the baseline 1.5.10#2 port without GL/EGL in its static
+  link interface: epoxy resolves those entry points through its dispatch
   layer, so a static consumer must not inherit the build host's shared GL/EGL.
 - `ports/libxcursor` supplies Xcursor 1.2.3, which is absent from the pinned
   baseline. The source commit and archive hash are pinned in its portfile.

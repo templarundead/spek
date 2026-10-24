@@ -1,0 +1,23 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -838,6 +838,9 @@
+         if(LIBRT)
+             string(APPEND LIBDBUS_LIBS " -lrt")
+         endif()
++        if(DBUS_BUS_ENABLE_SYSTEMD)
++            set(LIBDBUS_REQUIRES libsystemd)
++        endif()
+         set(original_prefix "${CMAKE_INSTALL_PREFIX}")
+         if(DBUS_RELOCATABLE)
+             set(pkgconfig_prefix "\${pcfiledir}/../..")
+diff --git a/dbus-1.pc.in b/dbus-1.pc.in
+--- a/dbus-1.pc.in
++++ b/dbus-1.pc.in
+@@ -17,5 +17,6 @@
+ Description: Free desktop message bus
+ Version: @VERSION@
+ Libs: -L${libdir} -ldbus-1
++Requires.private: @LIBDBUS_REQUIRES@
+ Libs.private: @LIBDBUS_LIBS@
+ Cflags: -I${includedir}/dbus-1.0 -I${libdir}/dbus-1.0/include @DBUS_STATIC_BUILD_CPPFLAGS@
