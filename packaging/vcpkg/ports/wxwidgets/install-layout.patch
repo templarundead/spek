@@ -1,4 +1,5 @@
 diff --git a/build/cmake/init.cmake b/build/cmake/init.cmake
+index 2847d70..5d65ad8 100644
 --- a/build/cmake/init.cmake
 +++ b/build/cmake/init.cmake
 @@ -201,11 +201,11 @@ endif()

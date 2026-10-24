@@ -1,5 +1,5 @@
 diff --git a/build/cmake/setup.h.in b/build/cmake/setup.h.in
-index d72d20d5cbc6..08169ee065e6 100644
+index 2697fc2..eb41960 100644
 --- a/build/cmake/setup.h.in
 +++ b/build/cmake/setup.h.in
 @@ -626,9 +626,9 @@
@@ -15,7 +15,7 @@ index d72d20d5cbc6..08169ee065e6 100644
  /*
     Use XTest extension to implement wxUIActionSimulator?
 diff --git a/setup.h.in b/setup.h.in
-index 2de3139090d1..4bec4eb6e4e1 100644
+index 0f1a1fd..7ab96c2 100644
 --- a/setup.h.in
 +++ b/setup.h.in
 @@ -625,7 +625,7 @@

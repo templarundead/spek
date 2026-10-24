@@ -1,7 +1,8 @@
 diff --git a/build/cmake/modules/FindGTK3.cmake b/build/cmake/modules/FindGTK3.cmake
+index d2939a1..e03a519 100644
 --- a/build/cmake/modules/FindGTK3.cmake
 +++ b/build/cmake/modules/FindGTK3.cmake
-@@ -47,6 +47,18 @@
+@@ -47,6 +47,18 @@ include(CheckSymbolExists)
  set(CMAKE_REQUIRED_INCLUDES ${GTK3_INCLUDE_DIRS})
  check_symbol_exists(GDK_WINDOWING_WAYLAND "gdk/gdk.h" wxHAVE_GDK_WAYLAND)
  check_symbol_exists(GDK_WINDOWING_X11 "gdk/gdk.h" wxHAVE_GDK_X11)
