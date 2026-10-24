@@ -77,6 +77,7 @@ On macOS with Homebrew:
 | `SPEK_BUILD_TESTS`    | `ON`    | Build the test suite.                           |
 | `SPEK_ENABLE_NLS`     | `ON`    | Enable the translations.                        |
 | `SPEK_INSTALL`        | `ON`    | Generate the installation rules.                |
+| `SPEK_STATIC_LINK`    | `OFF`   | Link a self-contained static Linux executable.  |
 | `CMAKE_BUILD_TYPE`    | `Release` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
 
 #### Building with vcpkg
@@ -89,8 +90,13 @@ can be fetched and built automatically on any platform:
     cmake --build build
 
 The GitHub Actions workflow (`.github/workflows/build.yml`) uses vcpkg on
-Windows, where there is no system package manager.
+Windows and for the self-contained Linux binaries.
 
 Add `-DVCPKG_TARGET_TRIPLET=x64-windows-static` to link wxWidgets, FFmpeg and
 the runtime library statically: the result is a single `spek.exe` with no DLL
 next to it, which is how the `spek-cli-gui-windows-static` artefact is built.
+
+On Linux, use `-DVCPKG_TARGET_TRIPLET=x64-linux -DSPEK_STATIC_LINK=ON` (or the
+`arm64-linux` triplet on aarch64). This links the executable, wxWidgets,
+FFmpeg, their dependencies and the compiler runtimes statically, without
+relying on the shared libraries installed on the build machine.

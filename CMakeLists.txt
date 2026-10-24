@@ -42,6 +42,7 @@ option(SPEK_BUILD_GUI "Build the wxWidgets graphical interface" ON)
 option(SPEK_BUILD_TESTS "Build the test suite" ON)
 option(SPEK_ENABLE_NLS "Enable translations" ON)
 option(SPEK_INSTALL "Generate the installation rules" ON)
+option(SPEK_STATIC_LINK "Link a self-contained static executable (Linux only)" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -61,6 +62,20 @@ if(MSVC AND (VCPKG_CRT_LINKAGE STREQUAL "static"
     # vcpkg builds the packages of a static triplet with the static runtime
     # library, and mixing the two runtimes does not link.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
+if(SPEK_STATIC_LINK)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "SPEK_STATIC_LINK is currently supported only on Linux")
+    endif()
+
+    # Static archives do not record their transitive dependencies. Ask both
+    # pkg-config and wx-config for the complete static link interface, and
+    # link the runtime libraries as well so the artifact does not depend on
+    # the compiler or FFmpeg versions installed on the build machine.
+    set(FFmpeg_USE_STATIC_LIBS ON)
+    list(APPEND wxWidgets_CONFIG_OPTIONS --static)
+    add_link_options(-static)
 endif()
 
 # Threads are used by the pipeline and by the batch mode of the CLI.

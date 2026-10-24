@@ -17,9 +17,9 @@
 # binaries (which double as the command line tool and as the graphical
 # application) as workflow artefacts.
 #
-# The dependencies come from the package manager of the platform where
-# possible and from vcpkg on Windows, where there is none. vcpkg can be
-# used everywhere: see vcpkg.json and INSTALL.md.
+# macOS uses Homebrew. Windows and the self-contained Linux builds use vcpkg:
+# the standard Linux triplets already build static libraries. See vcpkg.json
+# and INSTALL.md.
 
 name: Build
 
@@ -38,6 +38,8 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      checks: write
 
     # std::expected needs GCC 13 or newer, or Clang 19 or newer with a
     # matching standard library: the Ubuntu image only has Clang 18, which
@@ -51,18 +53,24 @@ jobs:
             compiler: g++-13
             cc: gcc-13
             cxx: g++-13
+            triplet: x64-linux
+            cache_id: x64-linux-gcc13
             artifact: spek-cli-gui-ubuntu
           - os: ubuntu-latest
             name: ubuntu-latest (GCC 14)
             compiler: g++-14
             cc: gcc-14
             cxx: g++-14
+            triplet: x64-linux
+            cache_id: x64-linux-gcc14
             artifact: spek-cli-gui-ubuntu-gcc14
           - os: ubuntu-24.04-arm
             name: ubuntu-24.04-arm (GCC 13)
             compiler: g++-13
             cc: gcc-13
             cxx: g++-13
+            triplet: arm64-linux
+            cache_id: arm64-linux-gcc13
             artifact: spek-cli-gui-linux-aarch64
           - os: macos-latest
             name: macos-latest (Apple Clang)
@@ -72,12 +80,14 @@ jobs:
           - os: windows-latest
             name: windows-latest (MSVC)
             triplet: x64-windows
+            cache_id: x64-windows
             artifact: spek-cli-gui-windows
           # The same Windows build with wxWidgets, FFmpeg and the runtime
           # linked in statically: a single spek.exe which needs no DLLs.
           - os: windows-latest
             name: windows-latest (MSVC, static)
             triplet: x64-windows-static
+            cache_id: x64-windows-static
             artifact: spek-cli-gui-windows-static
 
     steps:
@@ -90,17 +100,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            autoconf \
+            autoconf-archive \
+            automake \
+            bison \
             cmake \
-            ninja-build \
             gettext \
+            gperf \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libtool \
+            nasm \
+            ninja-build \
             pkg-config \
-            zlib1g-dev \
-            "${{ matrix.compiler }}" \
-            libavcodec-dev \
-            libavformat-dev \
-            libavutil-dev \
-            libswresample-dev \
-            libwxgtk3.2-dev
+            "${{ matrix.compiler }}"
 
       # ---------------------------------------------------------------- macOS
       - name: Install the dependencies (macOS)
@@ -109,33 +122,49 @@ jobs:
           brew update
           brew install cmake ninja pkg-config ffmpeg wxwidgets gettext
 
-      # -------------------------------------------------------------- Windows
-      # There is no system package manager on Windows, so use vcpkg and cache
-      # the built packages: only the first run has to compile wxWidgets and
-      # FFmpeg.
-      # Restoring and saving are two steps on purpose: building wxWidgets and
-      # FFmpeg takes about half an hour, and a single cache step would throw
-      # the packages away whenever the job fails.
-
-      # The packages of each triplet are cached separately.
-      - name: Restore the vcpkg binary packages (Windows)
-        if: runner.os == 'Windows'
+      # ------------------------------------------------------- vcpkg packages
+      # Windows and the self-contained Linux binaries use static dependencies
+      # from vcpkg. Restoring and saving are two steps on purpose: compiling
+      # wxWidgets, GTK and FFmpeg takes a while, and a single cache step would
+      # throw the packages away whenever the job fails.
+      - name: Restore the vcpkg binary packages (Linux, Windows)
+        if: runner.os == 'Linux' || runner.os == 'Windows'
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ matrix.triplet }}-
+            vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-
+
+      - name: Prepare the build environment (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          vcpkg="${VCPKG_INSTALLATION_ROOT:-${VCPKG_ROOT:-}}"
+          if [[ -z "$vcpkg" ]]; then
+            echo "Cannot find vcpkg on this runner" >&2
+            exit 1
+          fi
+          toolchain="$vcpkg/scripts/buildsystems/vcpkg.cmake"
+          if [[ ! -f "$toolchain" ]]; then
+            echo "Cannot find $toolchain" >&2
+            exit 1
+          fi
+          echo "SPEK_VCPKG_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
 
       - name: Configure (Linux)
         if: runner.os == 'Linux'
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: >
-          cmake -B build -S . -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DSPEK_BUILD_TESTS=ON
+          VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite"
+          VCPKG_TARGET_TRIPLET: ${{ matrix.triplet }}
+        run: |
+          cmake -B build -S . -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$SPEK_VCPKG_TOOLCHAIN" \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+            -DSPEK_BUILD_TESTS=ON \
+            -DSPEK_STATIC_LINK=ON 2>&1 | tee configure.log
 
       - name: Configure (macOS)
         if: runner.os == 'macOS'
@@ -176,7 +205,33 @@ jobs:
       # --config is what the multi-configuration generators need, the
       # single-configuration ones ignore it.
       - name: Build
+        id: build
         run: cmake --build build --config Release
+
+      # TEMPORARY: publish Linux configure/link failures where they can be
+      # diagnosed without access to the runner.
+      - name: Report the Linux build errors
+        if: failure() && runner.os == 'Linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [[ "${{ steps.build.outcome }}" == "failure" ]]; then
+            cmake --build build --config Release > build.log 2>&1 || true
+          fi
+          cat configure.log build.log 2>/dev/null > build-failure.log || true
+          if [[ ! -s build-failure.log ]]; then
+            echo "The job failed before producing a build log." > build-failure.log
+          fi
+          jq -Rs --arg sha "$GITHUB_SHA" \
+            --arg name "build-log (${{ matrix.name }})" \
+            '{name: $name, head_sha: $sha, status: "completed",
+              conclusion: "failure",
+              output: {title: "Build log", summary: "The build failed",
+              text: (.[-60000:])}}' build-failure.log |
+            gh api -X POST "repos/$GH_REPO/check-runs" --input -
+          exit 1
 
       - name: Run the test suite
         run: ctest --test-dir build -C Release --output-on-failure
@@ -192,6 +247,19 @@ jobs:
         run: |
           .\build\src\Release\spek.exe --version
           .\build\src\Release\spek.exe --cli --input tests/samples --output build/spectrograms --width 100
+
+      # A fully static executable has no DT_NEEDED entries. Check this rather
+      # than relying on the build machine, which can satisfy accidental
+      # dynamic dependencies from its system directories.
+      - name: Check that the Linux binary is self-contained
+        if: runner.os == 'Linux'
+        run: |
+          file build/src/spek
+          if readelf -d build/src/spek | grep -q '(NEEDED)'; then
+            echo "The static Linux binary still has dynamic dependencies:" >&2
+            readelf -d build/src/spek | grep '(NEEDED)' >&2
+            exit 1
+          fi
 
       # vcpkg copies the DLLs of its packages next to the binary, so there
       # must not be any when everything is linked statically.
@@ -221,13 +289,13 @@ jobs:
             Copy-Item -Destination "${{ matrix.artifact }}\"
           Get-ChildItem "${{ matrix.artifact }}"
 
-      - name: Save the vcpkg binary packages (Windows)
-        if: runner.os == 'Windows' && always()
+      - name: Save the vcpkg binary packages (Linux, Windows)
+        if: (runner.os == 'Linux' || runner.os == 'Windows') && always()
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Upload the artefacts
         uses: actions/upload-artifact@v4
