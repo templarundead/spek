@@ -17,7 +17,10 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "spek-cli.h"
 #include "spek-i18n.h"
@@ -27,6 +30,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 #if SPEK_BUILD_GUI
@@ -78,7 +82,69 @@ void attach_parent_console()
 } // namespace
 #endif
 
-int main(int argc, char **argv)
+#if defined(OS_WIN) && SPEK_BUILD_GUI
+namespace
+{
+
+// WinMain does not receive argc/argv. Reconstruct them from the native wide
+// command line instead of using the ANSI CRT globals, so file names remain
+// valid Unicode when the common dispatcher is used.
+class WindowsCommandLine
+{
+public:
+    WindowsCommandLine()
+    {
+        int wide_count = 0;
+        wchar_t **wide_argv = CommandLineToArgvW(GetCommandLineW(), &wide_count);
+        if (wide_argv == nullptr) {
+            return;
+        }
+
+        bool converted = true;
+        for (int i = 0; i < wide_count; ++i) {
+            const int size = WideCharToMultiByte(
+                CP_UTF8, 0, wide_argv[i], -1, nullptr, 0, nullptr, nullptr
+            );
+            if (size <= 0) {
+                converted = false;
+                break;
+            }
+            std::string argument(static_cast<std::size_t>(size), '\0');
+            if (WideCharToMultiByte(
+                    CP_UTF8, 0, wide_argv[i], -1, argument.data(), size, nullptr, nullptr
+                ) == 0) {
+                converted = false;
+                break;
+            }
+            this->strings.push_back(std::move(argument));
+        }
+        LocalFree(wide_argv);
+
+        if (!converted) {
+            return;
+        }
+        this->arguments.reserve(this->strings.size() + 1);
+        for (auto& argument : this->strings) {
+            this->arguments.push_back(argument.data());
+        }
+        this->arguments.push_back(nullptr);
+        this->ready = true;
+    }
+
+    bool is_ready() const { return this->ready; }
+    int argc() const { return static_cast<int>(this->strings.size()); }
+    char **argv() { return this->arguments.data(); }
+
+private:
+    std::vector<std::string> strings;
+    std::vector<char *> arguments;
+    bool ready = false;
+};
+
+} // namespace
+#endif
+
+int spek_main(int argc, char **argv)
 {
     // Select the execution mode before doing anything which could initialize
     // the GUI. Help and no-argument invocations are handled without wx at
@@ -132,3 +198,24 @@ int main(int argc, char **argv)
     return spek::run_cli(argc, argv);
 #endif
 }
+
+int main(int argc, char **argv)
+{
+    return spek_main(argc, argv);
+}
+
+#if defined(OS_WIN) && SPEK_BUILD_GUI
+// Let the Windows linker select WinMainCRTStartup. Using the normal GUI CRT
+// entry is important for both static initialization and orderly process exit;
+// the old /ENTRY:mainCRTStartup override bypassed this platform convention.
+extern "C" int WINAPI WinMain(
+    HINSTANCE, HINSTANCE, LPSTR, int
+)
+{
+    WindowsCommandLine command_line;
+    if (!command_line.is_ready()) {
+        return 1;
+    }
+    return spek_main(command_line.argc(), command_line.argv());
+}
+#endif
