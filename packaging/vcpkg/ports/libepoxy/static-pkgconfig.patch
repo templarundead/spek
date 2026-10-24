@@ -1,12 +1,22 @@
 diff --git a/src/meson.build b/src/meson.build
 --- a/src/meson.build
 +++ b/src/meson.build
-@@ -117,5 +117,7 @@
+@@ -107,7 +107,10 @@
+ 
+ pkg = import('pkgconfig')
+ pkg.generate(
+-  libraries: libepoxy,
++  # Passing the static target also exports header-only GL/EGL dependencies.
++  # Epoxy resolves those APIs at runtime; only dl is a static link dependency.
++  libraries: ['-L${libdir}', '-lepoxy'],
++  libraries_private: dl_dep,
+   name: 'epoxy',
+   description: 'GL dispatch library',
+   version: meson.project_version(),
+@@ -117,5 +120,5 @@
      'epoxy_has_wgl=@0@'.format(epoxy_has_wgl),
    ],
    filebase: 'epoxy',
 -  requires_private: ' '.join(gl_reqs),
-+  # The generated entry points resolve GL and EGL through dlopen/dlsym.
-+  # Do not add the build host's shared GL/EGL libraries to static consumers.
 +  requires_private: '',
  )
