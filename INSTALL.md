@@ -90,3 +90,7 @@ can be fetched and built automatically on any platform:
 
 The GitHub Actions workflow (`.github/workflows/build.yml`) uses vcpkg on
 Windows, where there is no system package manager.
+
+Add `-DVCPKG_TARGET_TRIPLET=x64-windows-static` to link wxWidgets, FFmpeg and
+the runtime library statically: the result is a single `spek.exe` with no DLL
+next to it, which is how the `spek-cli-gui-windows-static` artefact is built.
