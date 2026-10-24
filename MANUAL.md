@@ -72,8 +72,10 @@ Spek - Acoustic Spectrum Analyser
 
 # BATCH PROCESSING
 
-With no arguments *Spek* prints the command-line help and exits. With a file
-argument and without `--cli`, *Spek* opens the graphical interface. When
+With no arguments in a terminal *Spek* prints the command-line help and exits.
+On Windows, launching the GUI executable from Explorer without a console opens
+the graphical interface. With a file argument and without `--cli`, *Spek* opens
+the graphical interface. When
 `--cli` (or `--input`) is given, *Spek* analyses the files and saves the
 spectrograms as PNG images without opening a window:
 

@@ -65,19 +65,23 @@ bool is_console_info_request(int argc, char **argv)
 #ifdef OS_WIN
 namespace
 {
-void attach_parent_console()
+bool attach_parent_console()
 {
     // A GUI-subsystem executable has no console of its own. Attach only for
     // the command-line modes; normal GUI startup must not create or detach a
     // console belonging to the terminal that launched us.
+    if (GetConsoleWindow() != nullptr) {
+        return true;
+    }
     if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
-        return;
+        return false;
     }
 
     FILE *stream = nullptr;
     (void) freopen_s(&stream, "CONIN$", "r", stdin);
     (void) freopen_s(&stream, "CONOUT$", "w", stdout);
     (void) freopen_s(&stream, "CONOUT$", "w", stderr);
+    return true;
 }
 } // namespace
 #endif
@@ -147,12 +151,18 @@ private:
 int spek_main(int argc, char **argv)
 {
     // Select the execution mode before doing anything which could initialize
-    // the GUI. Help and no-argument invocations are handled without wx at
-    // all. Analysis uses a console app only, never a GUI app or wxFrame.
+    // the GUI. Console help and no-argument terminal invocations are handled
+    // without wx at all. Analysis uses a console app only, never a GUI app or
+    // wxFrame. A Windows Explorer launch without a console opens the GUI.
 #if SPEK_BUILD_GUI
-    const bool use_cli = spek::wants_cli(argc, argv);
+    bool use_cli = spek::wants_cli(argc, argv);
 #ifdef OS_WIN
-    if (use_cli) {
+    if (argc == 1) {
+        // A console invocation with no arguments is the documented help
+        // request. Explorer has no parent console, so in that case launch the
+        // GUI instead of silently printing help into a non-existent console.
+        use_cli = attach_parent_console();
+    } else if (use_cli) {
         attach_parent_console();
     }
 #endif
