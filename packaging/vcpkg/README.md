@@ -9,7 +9,8 @@ pkg-config interface. That is not sufficient for an executable linked with
   vcpkg's X11 ports with `X_VCPKG_FORCE_VCPKG_X_LIBRARIES`.
 - `ports/wxwidgets` is the 3.3.3 port with static GTK transitive dependencies
   selected when `BUILD_SHARED_LIBS=OFF`. It also provides native dark-mode
-  support on Windows.
+  support on Windows and the upstream fix for converter/standard-path use
+  during static initialization (wxWidgets issue #27038).
 - `ports/dbus` is the baseline 1.16.2#1 port with support for vcpkg's
   `BUILD_SHARED_LIBS` setting instead of an unconditional shared library. Its
   pkg-config file also carries the optional libsystemd static link interface.

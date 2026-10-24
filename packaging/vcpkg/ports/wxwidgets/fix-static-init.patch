@@ -1,0 +1,125 @@
+diff --git a/include/wx/strconv.h b/include/wx/strconv.h
+index d19dae767efc..a2ab12ea3025 100644
+--- a/include/wx/strconv.h
++++ b/include/wx/strconv.h
+@@ -627,12 +627,23 @@ WX_DECLARE_GLOBAL_CONV(wxWhateverWorksConv, wxConvWhateverWorks)
+ //
+ // this is used by all file functions, can be changed by the application
+ //
++// Don't access this variable directly, use wxGetFileNameConv() to ensure that
++// it is initialized before use.
++//
+ // by default UTF-8 under Mac OS X and wxConvLibc elsewhere (but it's not used
+ // under Windows normally)
+ extern WXDLLIMPEXP_DATA_BASE(wxMBConv *) wxConvFileName;
+ 
++extern WXDLLIMPEXP_BASE wxMBConv* wxGetFileNameConvPtr();
++inline wxMBConv& wxGetFileNameConv()
++{
++    if ( !wxConvFileName )
++        wxConvFileName = wxGetFileNameConvPtr();
++    return *wxConvFileName;
++}
++
+ // backwards compatible define
+-#define wxConvFile (*wxConvFileName)
++#define wxConvFile (wxGetFileNameConv())
+ 
+ // the current conversion object, may be set to any conversion, is used by
+ // default in a couple of places inside wx (initially same as wxConvLibc)
+@@ -668,11 +679,11 @@ extern WXDLLIMPEXP_DATA_BASE(wxMBConv *) wxConvUI;
+ 
+ // filenames are multibyte on Unix and widechar on Windows
+ #if wxMBFILES
+-    #define wxFNCONV(name) wxConvFileName->cWX2MB(name)
++    #define wxFNCONV(name) wxGetFileNameConv().cWX2MB(name)
+     #define wxFNSTRINGCAST wxMBSTRINGCAST
+ #else
+ #if defined(__WXOSX__) && wxMBFILES
+-    #define wxFNCONV(name) wxConvFileName->cWC2MB( wxConvLocal.cWX2WC(name) )
++    #define wxFNCONV(name) wxGetFileNameConv().cWC2MB( wxConvLocal.cWX2WC(name) )
+ #else
+     #define wxFNCONV(name) name
+ #endif
+diff --git a/src/common/init.cpp b/src/common/init.cpp
+index 6a75e9c3d7b3..b0aefd6b54fe 100644
+--- a/src/common/init.cpp
++++ b/src/common/init.cpp
+@@ -156,7 +156,7 @@ void wxInitData::Initialize(int argcIn, char **argvIn)
+     for ( int i = 0; i < argcIn; i++ )
+     {
+ #ifdef __DARWIN__
+-        wxWCharBuffer buf(wxConvFileName->cMB2WX(argvIn[i]));
++        wxWCharBuffer buf(wxGetFileNameConv().cMB2WX(argvIn[i]));
+ #else
+         wxWCharBuffer buf(wxConvLocal.cMB2WX(argvIn[i]));
+ #endif
+diff --git a/src/common/stdpbase.cpp b/src/common/stdpbase.cpp
+index 077cb13890b9..fecfbfb9a0dd 100644
+--- a/src/common/stdpbase.cpp
++++ b/src/common/stdpbase.cpp
+@@ -44,8 +44,6 @@ class wxStandardPathsDefault : public wxStandardPaths
+     wxStandardPathsDefault() { }
+ };
+ 
+-static wxStandardPathsDefault gs_stdPaths;
+-
+ } // anonymous namespace
+ 
+ // ============================================================================
+@@ -79,7 +77,9 @@ wxString wxStandardPathsBase::GetExecutablePath() const
+ 
+ wxStandardPaths& wxAppTraitsBase::GetStandardPaths()
+ {
+-    return gs_stdPaths;
++    static wxStandardPathsDefault s_stdPaths;
++
++    return s_stdPaths;
+ }
+ 
+ wxStandardPathsBase::wxStandardPathsBase()
+diff --git a/src/common/strconv.cpp b/src/common/strconv.cpp
+index 2b2f9fd60b54..2d06f128a25f 100644
+--- a/src/common/strconv.cpp
++++ b/src/common/strconv.cpp
+@@ -3430,16 +3430,18 @@ WX_DEFINE_GLOBAL_CONV(wxCSConv, wxConvISO8859_1, (wxFONTENCODING_ISO8859_1));
+ WXDLLIMPEXP_DATA_BASE(wxMBConv *) wxConvCurrent = wxGet_wxConvLibcPtr();
+ WXDLLIMPEXP_DATA_BASE(wxMBConv *) wxConvUI = wxGet_wxConvLocalPtr();
+ 
+-#ifdef __DARWIN__
+-// It is important to use this conversion object under Darwin as it ensures
+-// that Unicode strings are (re)composed correctly even though xnu kernel uses
+-// decomposed form internally (at least for the file names).
+-static wxMBConvD_cf wxConvMacUTF8DObj(wxFONTENCODING_UTF8);
+-#endif
++WXDLLIMPEXP_DATA_BASE(wxMBConv *) wxConvFileName = nullptr;
+ 
+-WXDLLIMPEXP_DATA_BASE(wxMBConv *) wxConvFileName =
++wxMBConv* wxGetFileNameConvPtr()
++{
+ #ifdef __DARWIN__
+-                                    &wxConvMacUTF8DObj;
++    // It is important to use this conversion object under Darwin as it ensures
++    // that Unicode strings are (re)composed correctly even though xnu kernel uses
++    // decomposed form internally (at least for the file names).
++    static wxMBConvD_cf wxConvMacUTF8DObj(wxFONTENCODING_UTF8);
++
++    return &wxConvMacUTF8DObj;
+ #else // !__DARWIN__
+-                                    wxGet_wxConvWhateverWorksPtr();
++    return wxGet_wxConvWhateverWorksPtr();
+ #endif // __DARWIN__/!__DARWIN__
++}
+diff --git a/src/unix/dir.cpp b/src/unix/dir.cpp
+index f0b0a7e9633c..55396be33d7b 100644
+--- a/src/unix/dir.cpp
++++ b/src/unix/dir.cpp
+@@ -127,7 +127,7 @@ bool wxDirData::Read(wxString *filename)
+         if ( !de )
+             return false;
+ 
+-        de_d_name = wxString(de->d_name, *wxConvFileName);
++        de_d_name = wxString(de->d_name, wxGetFileNameConv());
+ 
+         // don't return "." and ".." unless asked for
+         if ( de->d_name[0] == '.' &&
