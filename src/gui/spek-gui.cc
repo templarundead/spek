@@ -41,6 +41,15 @@ extern "C" {
 namespace
 {
 
+#if defined(OS_UNIX) && SPEK_STATIC_LINK && defined(__GNUC__)
+// This must also precede ordinary static constructors: some statically linked
+// GTK/epoxy combinations probe GLX before wxEntry() is reached.
+__attribute__((constructor(102))) void disable_static_gdk_gl_early()
+{
+    setenv("GDK_GL", "disable", 1);
+}
+#endif
+
 class SpekApp : public wxApp
 {
 public:
@@ -76,10 +85,18 @@ std::string wx_translate_plural(const char *msgid, const char *msgid_plural, uns
     ).utf8_str());
 }
 
+wxAppConsole *create_app()
+{
+    wxAppConsole::CheckBuildOptions(WX_BUILD_OPTIONS_SIGNATURE, "Spek");
+    return new SpekApp;
+}
+
 } // namespace
 
-// Spek defines its own main(), so we only implement the application class.
-wxIMPLEMENT_APP_NO_MAIN(SpekApp);
+// Do not use wxIMPLEMENT_APP_NO_MAIN() here. That macro creates a global
+// wxAppInitializer, which calls into wx before main() and before the static
+// wxGTK support has a well-defined initialization order. The initializer is
+// installed explicitly at the beginning of spek_run_gui() instead.
 
 bool SpekApp::OnInit()
 {
@@ -194,5 +211,9 @@ int spek_run_gui(int argc, char **argv)
     // a fully static process, which can crash in LLVM's initialisers.
     setenv("GDK_GL", "disable", 1);
 #endif
+
+    // Install this only after all static constructors have run. In particular,
+    // avoid wxAppInitializer's pre-main call into wxWidgets (see above).
+    wxApp::SetInitializerFunction(&create_app);
     return wxEntry(argc, argv);
 }

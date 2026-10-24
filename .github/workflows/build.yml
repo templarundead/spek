@@ -324,9 +324,9 @@ jobs:
             shift
             set +e
             SPEK_EXPECTED_TITLE="$expected" SPEK_AS_ROOT="${SPEK_AS_ROOT:-0}" \
-              xvfb-run -a bash -c '
+              SPEK_TRACE_STARTUP=1 xvfb-run -a bash -c '
               if [[ "$SPEK_AS_ROOT" == 1 ]]; then
-                sudo --preserve-env=DISPLAY,XAUTHORITY \
+                sudo --preserve-env=DISPLAY,XAUTHORITY,SPEK_TRACE_STARTUP \
                   ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
               else
                 ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
@@ -377,7 +377,7 @@ jobs:
               set +e
               if [[ "${SPEK_AS_ROOT:-0}" == 1 ]]; then
                 timeout --signal=TERM --kill-after=5s 20s \
-                  xvfb-run -a sudo --preserve-env=DISPLAY,XAUTHORITY \
+                  xvfb-run -a sudo --preserve-env=DISPLAY,XAUTHORITY,SPEK_TRACE_STARTUP \
                   gdb -q -batch -ex run -ex "thread apply all bt" \
                   --args ./build/src/spek "$@" >> gui-gdb.log 2>&1
               else

@@ -16,6 +16,7 @@
 #include "spek-config.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 #include "spek-cli.h"
 #include "spek-i18n.h"
@@ -53,6 +54,12 @@ void attach_parent_console()
 
 int main(int argc, char **argv)
 {
+#if defined(OS_UNIX) && SPEK_STATIC_LINK
+    if (std::getenv("SPEK_TRACE_STARTUP") != nullptr) {
+        std::fputs("Spek: main() reached\n", stderr);
+    }
+#endif
+
 #if SPEK_BUILD_GUI
     const bool use_cli = spek::wants_cli(argc, argv);
 #ifdef OS_WIN

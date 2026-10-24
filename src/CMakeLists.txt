@@ -24,6 +24,14 @@ add_executable(spek
     spek-main.cc
 )
 
+if(UNIX AND NOT APPLE AND SPEK_STATIC_LINK)
+    # Keep symbols available to the early fatal-signal reporter. The reporter
+    # is deliberately part of the executable, not a wx callback, so it also
+    # covers failures in static constructors before main().
+    target_sources(spek PRIVATE spek-crash.cc)
+    target_link_options(spek PRIVATE -rdynamic)
+endif()
+
 target_link_libraries(spek PRIVATE spek-cli spek-core)
 
 if(SPEK_BUILD_GUI)
@@ -38,15 +46,22 @@ set_target_properties(spek PROPERTIES
 )
 
 if(WIN32 AND SPEK_BUILD_GUI)
-    # The application icon and, through wx/msw/wx.rc, the per-monitor DPI
-    # awareness manifest that makes wxWidgets aware of High-DPI screens.
     # Resource objects cannot live in a static library, so the script is
-    # compiled into the executable itself.
+    # compiled into the executable itself. It contains the icons and, for
+    # non-MSVC resource compilers, the explicit High-DPI manifest.
     target_sources(spek PRIVATE "${PROJECT_SOURCE_DIR}/dist/win/spek.rc")
     set_source_files_properties(
         "${PROJECT_SOURCE_DIR}/dist/win/spek.rc"
-        PROPERTIES INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/dist/win"
+        PROPERTIES INCLUDE_DIRECTORIES
+            "${PROJECT_SOURCE_DIR}/dist/win;${PROJECT_SOURCE_DIR}/src"
     )
+
+    if(MSVC)
+        # Keep DPI awareness in the Visual Studio project as well as in the
+        # manifest so MSVC, clang-cl and the IDE all use the same setting.
+        set_property(TARGET spek PROPERTY VS_DPI_AWARE "PerMonitor")
+        target_sources(spek PRIVATE "${PROJECT_SOURCE_DIR}/src/app.manifest")
+    endif()
 endif()
 
 if(WIN32)

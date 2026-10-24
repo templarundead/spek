@@ -1,5 +1,14 @@
-#define wxUSE_DPI_AWARE_MANIFEST 2
+// Keep the application manifest in one place. wxWidgets' own manifest is
+// disabled below so that it cannot conflict with the explicit PerMonitorV2
+// declaration in src/app.manifest.
+#define wxUSE_NO_MANIFEST 1
 #include <wx/msw/wx.rc>
+
+// Visual Studio/MSVC receives src/app.manifest as a manifest input from
+// CMake. MinGW and other resource-compiler toolchains embed it here instead.
+#ifndef _MSC_VER
+1 RT_MANIFEST "app.manifest"
+#endif
 
 aaaa ICON "spek.ico"
 help ICON "help.ico"
