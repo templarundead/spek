@@ -42,6 +42,8 @@ struct SpekSpectrogram::OpenRequest
     std::mutex mutex;
     bool finished = false;
     int samples = 0;
+    std::string file_name;
+    int stream = 0;
     Result result = std::unexpected(AudioError::CANNOT_OPEN_FILE);
 };
 
@@ -507,6 +509,7 @@ void SpekSpectrogram::start()
         return;
     }
 
+    auto pending = this->open_request;
     this->stop();
 
     // The number of samples is the number of pixels available for the image.
@@ -521,15 +524,31 @@ void SpekSpectrogram::start()
     const int bands = bits_to_bands(this->fft_bits);
     this->image.Create(samples, bands);
 
+    const std::string file_name(this->path.utf8_str());
+    const int stream = this->stream;
+
+    // Resizing the window changes only the number of output columns. Reuse an
+    // outstanding open for the same input instead of starting another network
+    // request for every wxEVT_SIZE while the cloud file is being fetched.
+    if (pending && pending->file_name == file_name && pending->stream == stream) {
+        {
+            std::lock_guard<std::mutex> lock(pending->mutex);
+            pending->samples = samples;
+        }
+        this->open_request = pending;
+        this->open_timer.Start(25);
+        return;
+    }
+
     // avformat_open_input(), which is called by Audio::open(), can block for
     // a long time for a cloud or network file. Keep it and all FFmpeg calls
     // in a worker which knows nothing about wx or this window. The timer only
     // transfers the completed result back to the GUI thread.
     auto request = std::make_shared<OpenRequest>();
     request->samples = samples;
+    request->file_name = file_name;
+    request->stream = stream;
     this->open_request = request;
-    const std::string file_name(this->path.utf8_str());
-    const int stream = this->stream;
     std::thread([request, file_name, stream]() {
         Audio audio;
         auto result = audio.open(file_name, stream);
