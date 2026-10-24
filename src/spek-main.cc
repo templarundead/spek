@@ -15,6 +15,8 @@
 
 #include "spek-config.h"
 
+#include <cstdio>
+
 #include "spek-cli.h"
 #include "spek-i18n.h"
 
@@ -29,21 +31,43 @@
 #include "spek-gui.h"
 #endif
 
+#ifdef OS_WIN
+namespace
+{
+void attach_parent_console()
+{
+    // A GUI-subsystem executable has no console of its own. Attach only for
+    // the command-line modes; normal GUI startup must not create or detach a
+    // console belonging to the terminal that launched us.
+    if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+        return;
+    }
+
+    FILE *stream = nullptr;
+    (void) freopen_s(&stream, "CONIN$", "r", stdin);
+    (void) freopen_s(&stream, "CONOUT$", "w", stdout);
+    (void) freopen_s(&stream, "CONOUT$", "w", stderr);
+}
+} // namespace
+#endif
+
 int main(int argc, char **argv)
 {
+#if SPEK_BUILD_GUI
+    const bool use_cli = spek::wants_cli(argc, argv);
+#ifdef OS_WIN
+    if (use_cli) {
+        attach_parent_console();
+    }
+#endif
+#endif
+
 #if SPEK_HAVE_INTL
     spek_i18n_init_gettext();
 #endif
 
 #if SPEK_BUILD_GUI
-    if (!spek::wants_cli(argc, argv)) {
-#ifdef OS_WIN
-        // Keep the console for command-line use, but don't leave a console
-        // window beside the GUI when the executable is started normally.
-        // If the user has a terminal open already, this only detaches Spek
-        // from it and never closes the terminal itself.
-        FreeConsole();
-#endif
+    if (!use_cli) {
         // Hand the command line over to wxWidgets, the graphical interface
         // registers its own translator so that the core strings are
         // translated through wx as well.

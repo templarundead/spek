@@ -294,8 +294,24 @@ jobs:
       - name: Smoke test the command line interface (Windows)
         if: runner.os == 'Windows'
         run: |
-          .\build\src\Release\spek.exe --version
-          .\build\src\Release\spek.exe --cli --input tests/samples --output build/spectrograms --width 100
+          $exe = (Resolve-Path .\build\src\Release\spek.exe).Path
+          # GUI-subsystem programs are not waited for by cmd/PowerShell's
+          # native-command shorthand. Wait explicitly so these checks measure
+          # the CLI process and its real exit status.
+          $version = Start-Process -FilePath $exe -ArgumentList '--version' `
+              -NoNewWindow -Wait -PassThru
+          if ($version.ExitCode -ne 0) {
+              throw "--version exited with code $($version.ExitCode)"
+          }
+          $cli = Start-Process -FilePath $exe `
+              -ArgumentList '--cli --input tests/samples --output build/spectrograms --width 100' `
+              -NoNewWindow -Wait -PassThru
+          if ($cli.ExitCode -ne 0) {
+              throw "CLI batch conversion exited with code $($cli.ExitCode)"
+          }
+          if (-not (Get-ChildItem build\spectrograms -Filter *.png -ErrorAction SilentlyContinue)) {
+              throw "CLI batch conversion did not produce a spectrogram"
+          }
 
       - name: Smoke test the graphical interface (Linux)
         if: runner.os == 'Linux'
@@ -307,10 +323,17 @@ jobs:
             local expected="$1"
             shift
             set +e
-            SPEK_EXPECTED_TITLE="$expected" xvfb-run -a bash -c '
-              ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
+            SPEK_EXPECTED_TITLE="$expected" SPEK_AS_ROOT="${SPEK_AS_ROOT:-0}" \
+              xvfb-run -a bash -c '
+              if [[ "$SPEK_AS_ROOT" == 1 ]]; then
+                sudo --preserve-env=DISPLAY,XAUTHORITY \
+                  ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
+              else
+                ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
+              fi
               pid=$!
               trap "kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true" EXIT
+              shown=0
               for i in {1..30}; do
                 if ! kill -0 $pid 2>/dev/null; then
                   wait $pid
@@ -320,25 +343,48 @@ jobs:
                 fi
                 if xdotool search --onlyvisible \
                     --name "$SPEK_EXPECTED_TITLE" >/dev/null 2>&1; then
-                  exit 0
+                  shown=1
+                  break
                 fi
                 sleep 0.5
               done
-              echo "The Linux GUI did not show the expected window: $SPEK_EXPECTED_TITLE"
-              for window in $(xdotool search --onlyvisible --name ".*" 2>/dev/null); do
-                printf "Visible window %s: " "$window"
-                xdotool getwindowname "$window" 2>/dev/null || true
+              if [[ $shown -ne 1 ]]; then
+                echo "The Linux GUI did not show the expected window: $SPEK_EXPECTED_TITLE"
+                for window in $(xdotool search --onlyvisible --name ".*" 2>/dev/null); do
+                  printf "Visible window %s: " "$window"
+                  xdotool getwindowname "$window" 2>/dev/null || true
+                done
+                exit 1
+              fi
+              # Do not kill the process as soon as the title appears. The
+              # update checker and other deferred initialisation run after
+              # window creation and must not crash a real GUI session.
+              for i in {1..20}; do
+                if ! kill -0 $pid 2>/dev/null; then
+                  wait $pid
+                  status=$?
+                  echo "The Linux GUI exited after showing its window with status $status"
+                  exit 1
+                fi
+                sleep 0.5
               done
-              exit 1
+              exit 0
             ' bash "$@" >> gui-driver.log 2>&1
             status=$?
             set -e
             cat gui-driver.log gui-smoke.log
             if [[ $status -ne 0 ]]; then
               set +e
-              timeout --signal=TERM --kill-after=5s 20s \
-                xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt" \
-                --args ./build/src/spek "$@" >> gui-gdb.log 2>&1
+              if [[ "${SPEK_AS_ROOT:-0}" == 1 ]]; then
+                timeout --signal=TERM --kill-after=5s 20s \
+                  xvfb-run -a sudo --preserve-env=DISPLAY,XAUTHORITY \
+                  gdb -q -batch -ex run -ex "thread apply all bt" \
+                  --args ./build/src/spek "$@" >> gui-gdb.log 2>&1
+              else
+                timeout --signal=TERM --kill-after=5s 20s \
+                  xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt" \
+                  --args ./build/src/spek "$@" >> gui-gdb.log 2>&1
+              fi
               set -e
               cat gui-gdb.log
               return 1
@@ -346,6 +392,11 @@ jobs:
           }
           run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
           run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
+          # The reported failures were from a root shell. Exercise that user
+          # and its real home directory as well, not just a fresh CI account.
+          export SPEK_AS_ROOT=1
+          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          unset SPEK_AS_ROOT
 
       # Exercise the other entry point as well: without --cli the same
       # executable must create its wxWidgets window instead of exiting after

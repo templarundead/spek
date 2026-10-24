@@ -56,9 +56,15 @@ if(WIN32)
     spek_copy_runtime_dlls(spek)
 endif()
 
-if(MSVC)
-    # Console subsystem: spek is also a command line tool (--cli).
-    set_target_properties(spek PROPERTIES WIN32_EXECUTABLE FALSE)
+if(WIN32 AND SPEK_BUILD_GUI)
+    # Do not create a console window for normal GUI startup. Command-line
+    # modes attach to the parent console explicitly in spek-main.cc.
+    set_target_properties(spek PROPERTIES WIN32_EXECUTABLE TRUE)
+    if(MSVC)
+        # Keep the existing main() entry point while using the Windows GUI
+        # subsystem. The CRT still performs normal startup and exit handling.
+        target_link_options(spek PRIVATE "/ENTRY:mainCRTStartup")
+    endif()
 endif()
 
 if(SPEK_INSTALL)
