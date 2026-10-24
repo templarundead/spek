@@ -218,11 +218,11 @@ jobs:
           VCPKG_TARGET_TRIPLET: ${{ matrix.triplet }}
         # No -G on purpose: CMake picks the newest Visual Studio of the
         # image, which is also what vcpkg builds its packages with.
-        run: >
-          cmake -B build -S . -A x64
-          -DCMAKE_TOOLCHAIN_FILE="$env:SPEK_VCPKG_TOOLCHAIN"
-          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
-          -DSPEK_BUILD_TESTS=ON
+        run: |
+          cmake -B build -S . -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:SPEK_VCPKG_TOOLCHAIN" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DSPEK_BUILD_TESTS=ON *> configure.log
 
       # --config is what the multi-configuration generators need, the
       # single-configuration ones ignore it.
@@ -300,40 +300,52 @@ jobs:
       - name: Smoke test the graphical interface (Linux)
         if: runner.os == 'Linux'
         run: |
-          set +e
-          xvfb-run -a bash -c '
-            ./build/src/spek "$1" > gui-smoke.log 2>&1 &
-            pid=$!
-            trap "kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true" EXIT
-            for i in {1..30}; do
-              if ! kill -0 $pid 2>/dev/null; then
-                wait $pid
-                status=$?
-                echo "The Linux GUI exited prematurely with status $status"
-                exit 1
-              fi
-              if xdotool search --onlyvisible \
-                  --name "Spek - 2ch-44100Hz-16bps[.]m4a" >/dev/null 2>&1; then
-                exit 0
-              fi
-              sleep 0.5
-            done
-            echo "The Linux GUI did not open the audio file within 15 seconds"
-            exit 1
-          ' bash tests/samples/2ch-44100Hz-16bps.m4a > gui-driver.log 2>&1
-          status=$?
-          set -e
-          cat gui-driver.log gui-smoke.log
-          if [[ $status -ne 0 ]]; then
+          : > gui-driver.log
+          : > gui-smoke.log
+          : > gui-gdb.log
+          run_gui_smoke() {
+            local expected="$1"
+            shift
             set +e
-            timeout --signal=TERM --kill-after=5s 20s \
-              xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt" \
-              --args ./build/src/spek tests/samples/2ch-44100Hz-16bps.m4a \
-              > gui-gdb.log 2>&1
+            SPEK_EXPECTED_TITLE="$expected" xvfb-run -a bash -c '
+              ./build/src/spek "$@" >> gui-smoke.log 2>&1 &
+              pid=$!
+              trap "kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true" EXIT
+              for i in {1..30}; do
+                if ! kill -0 $pid 2>/dev/null; then
+                  wait $pid
+                  status=$?
+                  echo "The Linux GUI exited prematurely with status $status"
+                  exit 1
+                fi
+                if xdotool search --onlyvisible \
+                    --name "$SPEK_EXPECTED_TITLE" >/dev/null 2>&1; then
+                  exit 0
+                fi
+                sleep 0.5
+              done
+              echo "The Linux GUI did not show the expected window: $SPEK_EXPECTED_TITLE"
+              for window in $(xdotool search --onlyvisible --name ".*" 2>/dev/null); do
+                printf "Visible window %s: " "$window"
+                xdotool getwindowname "$window" 2>/dev/null || true
+              done
+              exit 1
+            ' bash "$@" >> gui-driver.log 2>&1
+            status=$?
             set -e
-            cat gui-gdb.log
-            exit 1
-          fi
+            cat gui-driver.log gui-smoke.log
+            if [[ $status -ne 0 ]]; then
+              set +e
+              timeout --signal=TERM --kill-after=5s 20s \
+                xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt" \
+                --args ./build/src/spek "$@" >> gui-gdb.log 2>&1
+              set -e
+              cat gui-gdb.log
+              return 1
+            fi
+          }
+          run_gui_smoke '^Spek - Acoustic Spectrum Analyser$'
+          run_gui_smoke '^Spek - 2ch-44100Hz-16bps[.]m4a$' tests/samples/2ch-44100Hz-16bps.m4a
 
       # Exercise the other entry point as well: without --cli the same
       # executable must create its wxWidgets window instead of exiting after
