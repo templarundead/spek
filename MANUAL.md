@@ -83,6 +83,17 @@ spectrograms as PNG images without opening a window:
     spek --cli --full-image --input song.flac --output song-full.png
     spek --cli --input '~/Music' --output spectrograms --recursive --jobs 4
 
+Windows packages also include `spek-cli.exe`, a console-subsystem frontend for
+interactive use from `cmd.exe` or PowerShell. The shell waits for it to finish,
+so the prompt appears after the analysis output and the normal exit status and
+redirection work as expected:
+
+    spek-cli.exe --cli --full-image --input song.flac --output song-full.png
+
+The GUI `spek.exe` remains a GUI-subsystem application. When using that
+executable for CLI work from a script, wait for it explicitly (for example,
+with `Start-Process -Wait`) or use `spek-cli.exe` instead.
+
 When the input is a directory, every file with a known audio extension is
 analysed and the images are written into the output directory (or next to the
 input files when `--output` is omitted), keeping the name of the source file.

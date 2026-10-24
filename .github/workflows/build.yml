@@ -83,7 +83,8 @@ jobs:
             cache_id: x64-windows
             artifact: spek-cli-gui-windows
           # The same Windows build with wxWidgets, FFmpeg and the runtime
-          # linked in statically: a single spek.exe which needs no DLLs.
+          # linked in statically: self-contained GUI and console executables
+          # which need no DLLs.
           - os: windows-latest
             name: windows-latest (MSVC, static)
             triplet: x64-windows-static
@@ -357,6 +358,22 @@ jobs:
               throw "Full-image CLI did not produce a PNG"
           }
 
+          # The dedicated console-subsystem frontend is the interactive CLI
+          # contract: unlike a GUI-subsystem executable, PowerShell waits for
+          # it before displaying the next prompt. Invoke it directly rather
+          # than hiding that distinction behind Start-Process -Wait.
+          $consoleExe = (Resolve-Path .\build\src\Release\spek-cli.exe).Path
+          & $consoleExe '--cli' '--full-image' `
+              '--input' 'tests/samples/2ch-44100Hz-16bps.wav' `
+              '--output' 'build/console-full-image.png' `
+              '--width' '100' '--height' '64'
+          if ($LASTEXITCODE -ne 0) {
+              throw "Console frontend exited with code $LASTEXITCODE"
+          }
+          if (-not (Test-Path build\console-full-image.png -PathType Leaf)) {
+              throw "Console frontend did not produce a PNG"
+          }
+
       - name: Smoke test the graphical interface (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -566,6 +583,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "${{ matrix.artifact }}"
           Copy-Item build\src\Release\spek.exe -Destination "${{ matrix.artifact }}\"
+          Copy-Item build\src\Release\spek-cli.exe -Destination "${{ matrix.artifact }}\"
           Get-ChildItem -Path build\src\Release\*.dll -ErrorAction SilentlyContinue |
             Copy-Item -Destination "${{ matrix.artifact }}\"
           Get-ChildItem "${{ matrix.artifact }}"

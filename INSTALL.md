@@ -7,7 +7,10 @@ install Spek, download the MSI installer, double-click it and follow the
 instructions.
 
 If you don't want to use the installer, you can download the ZIP archive, unpack
-it somewhere on your disk and run `Spek\spek.exe`.
+it somewhere on your disk and run `Spek\spek.exe`. For interactive command-line
+analysis from `cmd.exe` or PowerShell, use the included `Spek\spek-cli.exe`:
+it is a console application, so the shell waits for the analysis and returns
+its prompt after the output. The GUI `spek.exe` does not open a console window.
 
 ## Mac OS X
 
@@ -104,8 +107,9 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) uses vcpkg on
 Windows and for the self-contained Linux binaries.
 
 Add `-DVCPKG_TARGET_TRIPLET=x64-windows-static` to link wxWidgets, FFmpeg and
-the runtime library statically: the result is a single `spek.exe` with no DLL
-next to it, which is how the `spek-cli-gui-windows-static` artefact is built.
+the runtime library statically: the result contains self-contained `spek.exe`
+and `spek-cli.exe` with no DLLs next to them, which is how the
+`spek-cli-gui-windows-static` artefact is built.
 
 On Linux, use `-DVCPKG_TARGET_TRIPLET=x64-linux-static -DSPEK_STATIC_LINK=ON`
 (or the `arm64-linux-static` triplet on aarch64). These repository overlay

@@ -88,6 +88,22 @@ spek --cli --input ~/Music --output spectrograms --recursive --jobs 4
 \f[R]
 .fi
 .PP
+Windows packages also include \f[C]spek-cli.exe\f[R], a console-subsystem
+frontend for interactive use from \f[C]cmd.exe\f[R] or PowerShell. The shell
+waits for it to finish, so the prompt appears after the analysis output and
+normal exit status and redirection work as expected:
+.IP
+.nf
+\f[C]
+spek-cli.exe --cli --full-image --input song.flac --output song-full.png
+\f[R]
+.fi
+.PP
+The GUI \f[C]spek.exe\f[R] remains a GUI-subsystem application. When using
+that executable for CLI work from a script, wait for it explicitly (for
+example, with \f[C]Start-Process -Wait\f[R]) or use \f[C]spek-cli.exe\f[R]
+instead.
+.PP
 When the input is a directory, every file with a known audio extension is
 analysed and the images are written into the output directory (or next to the
 input files when \f[C]--output\f[R] is omitted), keeping the name of the
