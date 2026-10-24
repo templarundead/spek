@@ -59,6 +59,12 @@ bool is_console_info_request(int argc, char **argv)
     return false;
 }
 
+wxAppConsole *create_console_app()
+{
+    wxAppConsole::CheckBuildOptions(WX_BUILD_OPTIONS_SIGNATURE, "Spek");
+    return new wxAppConsole();
+}
+
 } // namespace
 #endif
 
@@ -70,10 +76,7 @@ bool attach_parent_console()
     // A GUI-subsystem executable has no console of its own. Attach only for
     // the command-line modes; normal GUI startup must not create or detach a
     // console belonging to the terminal that launched us.
-    if (GetConsoleWindow() != nullptr) {
-        return true;
-    }
-    if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+    if (GetConsoleWindow() == nullptr && !AttachConsole(ATTACH_PARENT_PROCESS)) {
         return false;
     }
 
@@ -194,11 +197,15 @@ int spek_main(int argc, char **argv)
         return spek::run_cli(argc, argv);
     }
 
-    // Use wx's console lifecycle for analysis, but never enter its event
-    // loop. In particular, wxAppConsole does not call gtk_init_check(), so
-    // this remains suitable for SSH/headless use with a wxGTK build.
-    wxApp::SetInstance(new wxAppConsole());
-    if (!wxInitialize(argc, argv)) {
+    // Let wxEntryStart create a real wxAppConsole through its own smart
+    // pointer. Manually calling wxApp::SetInstance(new wxAppConsole()) first
+    // is unsafe: wxTheApp is a static_cast<wxApp*> in a GUI build. Replacing
+    // the factory temporarily also prevents GTK initialization.
+    const auto gui_initializer = wxApp::GetInitializerFunction();
+    wxApp::SetInitializerFunction(&create_console_app);
+    const bool initialized = wxInitialize(argc, argv);
+    wxApp::SetInitializerFunction(gui_initializer);
+    if (!initialized) {
         return 1;
     }
     const int exit_code = spek::run_cli(argc, argv);
