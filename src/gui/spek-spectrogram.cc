@@ -18,7 +18,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <expected>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <utility>
 
 #include <wx/dcbuffer.h>
 #include <wx/settings.h>
@@ -30,6 +34,16 @@
 #include "spek-ruler.h"
 
 #include "spek-spectrogram.h"
+
+struct SpekSpectrogram::OpenRequest
+{
+    using Result = std::expected<std::unique_ptr<AudioFile>, AudioError>;
+
+    std::mutex mutex;
+    bool finished = false;
+    int samples = 0;
+    Result result = std::unexpected(AudioError::CANNOT_OPEN_FILE);
+};
 
 wxBEGIN_EVENT_TABLE(SpekSpectrogram, wxWindow)
     EVT_CHAR(SpekSpectrogram::on_char)
@@ -72,6 +86,7 @@ SpekSpectrogram::SpekSpectrogram(wxFrame *parent) :
         parent, -1, wxDefaultPosition, wxDefaultSize,
         wxFULL_REPAINT_ON_RESIZE | wxWANTS_CHARS
     ),
+    open_timer(this),
     streams(0),
     stream(0),
     channels(0),
@@ -87,6 +102,7 @@ SpekSpectrogram::SpekSpectrogram(wxFrame *parent) :
     urange(URANGE),
     lrange(LRANGE)
 {
+    this->Bind(wxEVT_TIMER, &SpekSpectrogram::on_open_timer, this);
     this->create_palette();
 
     // Never let the window become so small that the labels around the plot
@@ -101,7 +117,8 @@ SpekSpectrogram::SpekSpectrogram(wxFrame *parent) :
         layout.tpad + layout.bpad + min_plot
     ));
 
-    SetBackgroundStyle(wxBG_STYLE_CUSTOM);
+    SetDoubleBuffered(true);
+    SetBackgroundStyle(wxBG_STYLE_PAINT);
     SetFocus();
 }
 
@@ -504,8 +521,53 @@ void SpekSpectrogram::start()
     const int bands = bits_to_bands(this->fft_bits);
     this->image.Create(samples, bands);
 
-    Audio audio;
-    auto file = audio.open(std::string(this->path.utf8_str()), this->stream);
+    // avformat_open_input(), which is called by Audio::open(), can block for
+    // a long time for a cloud or network file. Keep it and all FFmpeg calls
+    // in a worker which knows nothing about wx or this window. The timer only
+    // transfers the completed result back to the GUI thread.
+    auto request = std::make_shared<OpenRequest>();
+    request->samples = samples;
+    this->open_request = request;
+    const std::string file_name(this->path.utf8_str());
+    const int stream = this->stream;
+    std::thread([request, file_name, stream]() {
+        Audio audio;
+        auto result = audio.open(file_name, stream);
+        std::lock_guard<std::mutex> lock(request->mutex);
+        request->result = std::move(result);
+        request->finished = true;
+    }).detach();
+    this->open_timer.Start(25);
+}
+
+void SpekSpectrogram::on_open_timer(wxTimerEvent&)
+{
+    auto request = this->open_request;
+    if (!request) {
+        this->open_timer.Stop();
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(request->mutex);
+        if (!request->finished) {
+            return;
+        }
+    }
+
+    this->open_timer.Stop();
+    this->open_request.reset();
+    this->finish_open(request);
+    this->Refresh();
+}
+
+void SpekSpectrogram::finish_open(const std::shared_ptr<OpenRequest>& request)
+{
+    std::unique_lock<std::mutex> lock(request->mutex);
+    auto file = std::move(request->result);
+    const int samples = request->samples;
+    lock.unlock();
+
     if (!file) {
         this->desc = wxString::FromUTF8(spek_audio_error_message(file.error()).c_str());
         this->duration = 0.0;
@@ -546,6 +608,9 @@ void SpekSpectrogram::start()
 
 void SpekSpectrogram::stop()
 {
+    this->open_timer.Stop();
+    this->open_request.reset();
+
     if (this->pipeline) {
         // The destructor stops the analysis and waits for the threads.
         this->pipeline.reset();
