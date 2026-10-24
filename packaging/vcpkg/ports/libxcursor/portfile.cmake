@@ -7,6 +7,8 @@ vcpkg_from_github(
 )
 
 set(ENV{ACLOCAL} "aclocal -I \"${CURRENT_INSTALLED_DIR}/share/xorg/aclocal/\"")
+# The release archive declares this macro directory but does not contain it.
+file(MAKE_DIRECTORY "${SOURCE_PATH}/m4")
 
 vcpkg_configure_make(
     SOURCE_PATH "${SOURCE_PATH}"
