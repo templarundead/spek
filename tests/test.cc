@@ -9,6 +9,7 @@ int main()
 
     test_audio();
     test_fft();
+    test_full_image();
     test_pipeline();
     test_utils();
 

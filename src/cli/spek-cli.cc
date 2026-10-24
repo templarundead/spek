@@ -36,6 +36,7 @@ extern "C" {
 
 #include "spek-audio.h"
 #include "spek-fft.h"
+#include "spek-full-image.h"
 #include "spek-i18n.h"
 #include "spek-image.h"
 #include "spek-palette.h"
@@ -73,6 +74,7 @@ struct Options
     bool recursive = false;
     unsigned jobs = 1;
     bool quiet = false;
+    bool full_image = false;
 };
 
 void print_usage(std::ostream& os)
@@ -101,6 +103,7 @@ void print_usage(std::ostream& os)
     os << spek_tr("  -r, --recursive         Recurse into sub-directories.\n");
     os << spek_tr("  -j, --jobs <n>          Number of files to analyse in parallel.\n");
     os << spek_tr("  -q, --quiet             Do not print progress information.\n");
+    os << spek_tr("      --full-image        Include rulers, axes and file information.\n");
     os << spek_tr("  -h, --help              Show this help message.\n");
     os << spek_tr("  -V, --version           Display the version and exit.\n");
 }
@@ -225,6 +228,8 @@ std::optional<Options> parse_options(int argc, char **argv)
             // Nothing to do, the presence of the option selects the CLI.
         } else if (flag("-q", "--quiet")) {
             options.quiet = true;
+        } else if (flag("", "--full-image")) {
+            options.full_image = true;
         } else if (flag("-r", "--recursive")) {
             options.recursive = true;
         } else if (arg == "-i" || arg == "--input" || match_option(arg, "--input")) {
@@ -493,6 +498,22 @@ std::string render(
         }
     }
 
+    if (options.full_image) {
+        SpekFullImageInfo full_info;
+        const auto input_utf8 = input.u8string();
+        full_info.file_name.assign(input_utf8.begin(), input_utf8.end());
+        full_info.description = desc;
+        full_info.duration = pipeline.duration();
+        full_info.sample_rate = pipeline.sample_rate();
+        full_info.min_db = options.min_db;
+        full_info.max_db = options.max_db;
+        full_info.palette = options.palette;
+        image = spek_render_full_image(image, full_info);
+        if (image.empty()) {
+            return spek_tr("cannot render the full image");
+        }
+    }
+
     return {};
 }
 
@@ -542,7 +563,7 @@ bool wants_cli(int argc, char **argv)
     static constexpr std::string_view long_options[] = {
         "--cli", "--help", "--version", "--input", "--output", "--width",
         "--height", "--fft-bits", "--stream", "--channel", "--min-db", "--max-db",
-        "--palette", "--window", "--recursive", "--jobs", "--quiet",
+        "--palette", "--window", "--recursive", "--jobs", "--quiet", "--full-image",
     };
 
     for (int i = 1; i < argc; ++i) {

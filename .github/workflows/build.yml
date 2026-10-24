@@ -304,6 +304,18 @@ jobs:
             --input=tests/samples/2ch-44100Hz-16bps.m4a \
             --output=build/headless-cli.png --width=100
           test -s build/headless-cli.png
+          run_headless ./build/src/spek --cli --full-image \
+            --input=tests/samples/2ch-44100Hz-16bps.wav \
+            --output=build/full-image.png --width=100 --height=64
+          test -s build/full-image.png
+          python3 - <<'PY'
+          import struct
+          with open("build/full-image.png", "rb") as image:
+              header = image.read(24)
+          assert header[:8] == b"\x89PNG\r\n\x1a\n"
+          width, height = struct.unpack(">II", header[16:24])
+          assert width > 100 and height > 64, (width, height)
+          PY
 
       - name: Smoke test the command line interface (Windows)
         if: runner.os == 'Windows'
@@ -325,6 +337,15 @@ jobs:
           }
           if (-not (Get-ChildItem build\spectrograms -Filter *.png -ErrorAction SilentlyContinue)) {
               throw "CLI batch conversion did not produce a spectrogram"
+          }
+          $full = Start-Process -FilePath $exe `
+              -ArgumentList '--cli --full-image --input tests/samples/2ch-44100Hz-16bps.wav --output build/full-image.png --width 100 --height 64' `
+              -NoNewWindow -Wait -PassThru
+          if ($full.ExitCode -ne 0) {
+              throw "Full-image CLI exited with code $($full.ExitCode)"
+          }
+          if (-not (Test-Path build\full-image.png -PathType Leaf)) {
+              throw "Full-image CLI did not produce a PNG"
           }
 
       - name: Smoke test the graphical interface (Linux)
@@ -371,7 +392,7 @@ jobs:
                 exit 1
               fi
               # Do not kill the process as soon as the title appears. The
-              # update checker and other deferred initialisation run after
+              # audio opening and other deferred initialisation run after
               # window creation and must not crash a real GUI session.
               for i in {1..20}; do
                 if ! kill -0 $pid 2>/dev/null; then

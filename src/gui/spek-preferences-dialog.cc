@@ -47,11 +47,9 @@ static const char *available_languages[] =
 };
 
 #define ID_LANGUAGE (wxID_HIGHEST + 1)
-#define ID_CHECK (wxID_HIGHEST + 2)
 
 BEGIN_EVENT_TABLE(SpekPreferencesDialog, wxDialog)
     EVT_CHOICE(ID_LANGUAGE, SpekPreferencesDialog::on_language)
-    EVT_CHECKBOX(ID_CHECK, SpekPreferencesDialog::on_check)
 END_EVENT_TABLE()
 
 SpekPreferencesDialog::SpekPreferencesDialog(wxWindow *parent) :
@@ -92,10 +90,6 @@ SpekPreferencesDialog::SpekPreferencesDialog(wxWindow *parent) :
         language_choice->SetSelection(active_index);
     }
 
-    wxCheckBox *check_update = new wxCheckBox(this, ID_CHECK, _("Check for &updates"));
-    inner_sizer->Add(check_update, 0 ,wxLEFT | wxTOP, 12);
-    check_update->SetValue(SpekPreferences::get().get_check_update());
-
     sizer->Add(CreateButtonSizer(wxOK), 0, wxALIGN_RIGHT | wxBOTTOM | wxRIGHT, 12);
     sizer->SetSizeHints(this);
     SetSizer(sizer);
@@ -104,9 +98,4 @@ SpekPreferencesDialog::SpekPreferencesDialog(wxWindow *parent) :
 void SpekPreferencesDialog::on_language(wxCommandEvent& event)
 {
     SpekPreferences::get().set_language(this->languages[event.GetSelection() * 2]);
-}
-
-void SpekPreferencesDialog::on_check(wxCommandEvent& event)
-{
-    SpekPreferences::get().set_check_update(event.IsChecked());
 }

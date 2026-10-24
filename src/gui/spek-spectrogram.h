@@ -78,6 +78,7 @@ private:
     void on_dpi_changed(wxDPIChangedEvent& event);
     void on_open_timer(wxTimerEvent& event);
     void render(wxDC& dc);
+    wxSize DoGetBestClientSize() const override;
 
     void start();
     void finish_open(const std::shared_ptr<OpenRequest>& request);

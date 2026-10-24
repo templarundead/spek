@@ -1,5 +1,6 @@
 #include "spek-config.h"
 
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -21,8 +22,19 @@
 
 #include "spek-window.h"
 
-// Posted by the update checker thread once a new version is available.
-wxDEFINE_EVENT(SPEK_NOTIFY_EVENT, wxCommandEvent);
+namespace
+{
+constexpr int ID_SHOW_TOOLBAR = wxID_HIGHEST + 1;
+constexpr int ID_CHECK_UPDATES = wxID_HIGHEST + 2;
+}
+
+struct SpekWindow::UpdateRequest
+{
+    std::mutex mutex;
+    bool finished = false;
+    // 1: a newer version exists, 0: up to date, -1: request failed.
+    int status = -1;
+};
 
 BEGIN_EVENT_TABLE(SpekWindow, wxFrame)
     EVT_ERASE_BACKGROUND(SpekWindow::on_erase_background)
@@ -31,13 +43,14 @@ BEGIN_EVENT_TABLE(SpekWindow, wxFrame)
     EVT_MENU(wxID_SAVE, SpekWindow::on_save)
     EVT_MENU(wxID_EXIT, SpekWindow::on_exit)
     EVT_MENU(wxID_PREFERENCES, SpekWindow::on_preferences)
+    EVT_MENU(ID_SHOW_TOOLBAR, SpekWindow::on_show_toolbar)
     EVT_MENU(wxID_HELP, SpekWindow::on_help)
+    EVT_MENU(ID_CHECK_UPDATES, SpekWindow::on_check_updates)
     EVT_MENU(wxID_ABOUT, SpekWindow::on_about)
-    EVT_COMMAND(-1, SPEK_NOTIFY_EVENT, SpekWindow::on_notify)
 END_EVENT_TABLE()
 
-// Forward declarations.
-static void check_version(SpekWindow *self);
+// Returns 1 for an available update, 0 when up to date and -1 on failure.
+static int check_version();
 
 class SpekDropTarget : public wxFileDropTarget
 {
@@ -58,7 +71,9 @@ private:
 };
 
 SpekWindow::SpekWindow(const wxString& path) :
-    wxFrame(NULL, -1, wxEmptyString, wxDefaultPosition, wxDefaultSize), path(path)
+    wxFrame(NULL, -1, wxEmptyString, wxDefaultPosition, wxDefaultSize),
+    update_timer(this),
+    path(path)
 {
     // Paint the frame as one buffered surface. In particular, do not let the
     // native Windows background erase expose a white frame in dark mode.
@@ -68,7 +83,10 @@ SpekWindow::SpekWindow(const wxString& path) :
 
     this->description = _("Spek - Acoustic Spectrum Analyser");
     SetTitle(this->description);
-    SetSize(this->FromDIP(wxSize(640, 480)));
+    const wxSize initial_size = this->FromDIP(wxSize(1024, 700));
+    SetMinSize(initial_size);
+    SetSize(initial_size);
+    this->Bind(wxEVT_TIMER, &SpekWindow::on_update_timer, this);
 
 #ifndef OS_OSX
     SetIcons(wxArtProvider::GetIconBundle(ART_SPEK, wxART_FRAME_ICON));
@@ -85,16 +103,23 @@ SpekWindow::SpekWindow(const wxString& path) :
     menu_file->Append(wxID_EXIT);
     menu->Append(menu_file, _("&File"));
 
-    wxMenu *menu_edit = new wxMenu();
-    wxMenuItem *menu_edit_prefs = new wxMenuItem(menu_edit, wxID_PREFERENCES);
-    menu_edit_prefs->SetItemLabel(menu_edit_prefs->GetItemLabelText() + "\tCtrl-E");
-    menu_edit->Append(menu_edit_prefs);
-    menu->Append(menu_edit, _("&Edit"));
+    wxMenu *menu_options = new wxMenu();
+    wxMenuItem *menu_options_prefs = new wxMenuItem(menu_options, wxID_PREFERENCES);
+    menu_options_prefs->SetItemLabel(menu_options_prefs->GetItemLabelText() + "\tCtrl-E");
+    menu_options->Append(menu_options_prefs);
+    menu_options->AppendSeparator();
+    wxMenuItem *menu_options_show = menu_options->AppendCheckItem(
+        ID_SHOW_TOOLBAR, _("Show Toolbar"));
+    menu->Append(menu_options, _("Options"));
 
     wxMenu *menu_help = new wxMenu();
     wxMenuItem *menu_help_contents = new wxMenuItem(
         menu_help, wxID_HELP, wxString(_("&Help")) + "\tF1");
     menu_help->Append(menu_help_contents);
+    menu_help->AppendSeparator();
+    this->check_updates_item = new wxMenuItem(
+        menu_help, ID_CHECK_UPDATES, _("Check for Updates..."));
+    menu_help->Append(this->check_updates_item);
     wxMenuItem *menu_help_about = new wxMenuItem(menu_help, wxID_ABOUT);
     menu_help_about->SetItemLabel(menu_help_about->GetItemLabelText() + "\tShift-F1");
     menu_help->Append(menu_help_about);
@@ -102,7 +127,7 @@ SpekWindow::SpekWindow(const wxString& path) :
 
     SetMenuBar(menu);
 
-    wxToolBar *toolbar = CreateToolBar();
+    this->toolbar = CreateToolBar();
     toolbar->SetExtraStyle(toolbar->GetExtraStyle() | wxWS_EX_PROCESS_UI_UPDATES);
     toolbar->SetBackgroundStyle(wxBG_STYLE_PAINT);
     toolbar->SetDoubleBuffered(true);
@@ -134,6 +159,9 @@ SpekWindow::SpekWindow(const wxString& path) :
         _("Help")
     );
     toolbar->Realize();
+    const bool show_toolbar = SpekPreferences::get().get_show_toolbar();
+    menu_options_show->Check(show_toolbar);
+    toolbar->Show(show_toolbar);
 
     wxSizer *sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -163,20 +191,22 @@ SpekWindow::SpekWindow(const wxString& path) :
 
     this->cur_dir = wxGetHomeDir();
 
+    SetDropTarget(new SpekDropTarget(this));
+    SetSizer(sizer);
+    this->Layout();
+
     if (!path.IsEmpty()) {
         open(path);
     }
 
-    SetDropTarget(new SpekDropTarget(this));
-
-    SetSizer(sizer);
-
     // Draw the window decorations in dark mode when the OS uses it.
     spek_platform_enable_dark_mode(this);
+}
 
-    // The update check runs in the background and posts an event when it
-    // finds a new version.
-    std::thread(check_version, this).detach();
+SpekWindow::~SpekWindow()
+{
+    this->update_timer.Stop();
+    this->update_request.reset();
 }
 
 void SpekWindow::on_erase_background(wxEraseEvent& event)
@@ -210,6 +240,16 @@ void SpekWindow::open(const wxString& path)
     SetTitle(title);
 
     this->spectrogram->open(path);
+
+    // SpekSpectrogram includes the file name in its best size. Grow only
+    // when necessary so the complete name is not replaced by an ellipsis.
+    const wxSize best_size = this->GetBestSize();
+    wxSize window_size = this->GetSize();
+    if (best_size.GetWidth() > window_size.GetWidth()) {
+        window_size.SetWidth(best_size.GetWidth());
+        this->SetSize(window_size);
+    }
+    this->Layout();
 }
 
 void SpekWindow::on_open(wxCommandEvent&)
@@ -300,11 +340,85 @@ void SpekWindow::on_preferences(wxCommandEvent&)
     dlg.ShowModal();
 }
 
+void SpekWindow::on_show_toolbar(wxCommandEvent& event)
+{
+    const bool show = event.IsChecked();
+    this->toolbar->Show(show);
+    this->Layout();
+    SpekPreferences::get().set_show_toolbar(show);
+}
+
 void SpekWindow::on_help(wxCommandEvent&)
 {
     wxLaunchDefaultBrowser(
         wxString::Format("http://help.spek.cc/man-%s.html", SPEK_VERSION)
     );
+}
+
+void SpekWindow::on_check_updates(wxCommandEvent&)
+{
+    if (this->update_request) {
+        return;
+    }
+
+    auto request = std::make_shared<UpdateRequest>();
+    this->update_request = request;
+    this->check_updates_item->Enable(false);
+    this->update_timer.Start(25);
+
+    // The request owns no window pointer. If the frame closes while the
+    // network is busy, its timer disappears and the worker simply releases
+    // the shared request when it finishes.
+    std::thread([request]() {
+        const int status = check_version();
+        std::lock_guard<std::mutex> lock(request->mutex);
+        request->status = status;
+        request->finished = true;
+    }).detach();
+}
+
+void SpekWindow::on_update_timer(wxTimerEvent&)
+{
+    auto request = this->update_request;
+    if (!request) {
+        this->update_timer.Stop();
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(request->mutex);
+        if (!request->finished) {
+            return;
+        }
+    }
+
+    this->update_timer.Stop();
+    this->update_request.reset();
+    this->check_updates_item->Enable(true);
+
+    if (request->status > 0) {
+        this->show_update_bar();
+    } else if (request->status == 0) {
+        wxMessageBox(
+            _("You are using the latest version of Spek."),
+            _("Check for Updates"),
+            wxOK | wxICON_INFORMATION,
+            this
+        );
+    } else {
+        wxMessageBox(
+            _("Unable to check for updates. Please try again later."),
+            _("Check for Updates"),
+            wxOK | wxICON_ERROR,
+            this
+        );
+    }
+}
+
+void SpekWindow::show_update_bar()
+{
+    this->GetSizer()->Show((size_t)0);
+    this->Layout();
 }
 
 void SpekWindow::on_about(wxCommandEvent&)
@@ -342,12 +456,6 @@ void SpekWindow::on_about(wxCommandEvent&)
     wxAboutBox(info);
 }
 
-void SpekWindow::on_notify(wxCommandEvent&)
-{
-    this->GetSizer()->Show((size_t)0);
-    this->Layout();
-}
-
 void SpekWindow::on_visit(wxCommandEvent&)
 {
     wxLaunchDefaultBrowser("https://www.spek.cc");
@@ -360,32 +468,11 @@ void SpekWindow::on_close(wxCommandEvent& event)
     self->Layout();
 }
 
-static void check_version(SpekWindow *self)
+static int check_version()
 {
-    // Does the user want to check for updates?
-    SpekPreferences& prefs = SpekPreferences::get();
-    if (!prefs.get_check_update()) {
-        return;
-    }
-
-    // Calculate the number of days since 0001-01-01, borrowed from GLib.
-    wxDateTime now = wxDateTime::Now();
-    int year = now.GetYear() - 1;
-    int days = year * 365;
-    days += (year >>= 2); // divide by 4 and add
-    days -= (year /= 25); // divides original # years by 100
-    days += year >> 2; // divides by 4, which divides original by 400
-    days += now.GetDayOfYear();
-
-    // When was the last update?
-    int diff = days - prefs.get_last_update();
-    if (diff < 7) {
-        return;
-    }
-
-    // Get the version number.
     wxString version;
     wxHTTP http;
+    http.SetTimeout(10);
     if (http.Connect("help.spek.cc")) {
         wxInputStream *stream = http.GetInputStream("/version");
         if (stream) {
@@ -397,16 +484,7 @@ static void check_version(SpekWindow *self)
     }
 
     if (version.IsEmpty()) {
-        return;
+        return -1;
     }
-
-    if (1 == spek_vercmp(version.mb_str(wxConvLibc).data(), SPEK_VERSION)) {
-        wxCommandEvent event(SPEK_NOTIFY_EVENT, -1);
-        event.SetEventObject(self);
-        wxPostEvent(self, event);
-    }
-
-    // Update the preferences.
-    prefs.set_check_update(true);
-    prefs.set_last_update(days);
+    return spek_vercmp(version.mb_str(wxConvLibc).data(), SPEK_VERSION) == 1 ? 1 : 0;
 }

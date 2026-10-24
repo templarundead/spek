@@ -20,6 +20,9 @@ add_library(spek-core STATIC
     spek-audio.h
     spek-fft.cc
     spek-fft.h
+    spek-font8x8.inc
+    spek-full-image.cc
+    spek-full-image.h
     spek-i18n.cc
     spek-i18n.h
     spek-image.cc
@@ -30,6 +33,8 @@ add_library(spek-core STATIC
     spek-pipeline.h
     spek-png.cc
     spek-png.h
+    spek-ruler-ticks.cc
+    spek-ruler-ticks.h
     spek-utils.cc
     spek-utils.h
 )

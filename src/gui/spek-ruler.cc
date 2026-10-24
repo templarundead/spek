@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <cmath>
+#include "spek-ruler-ticks.h"
 
 #include "spek-ruler.h"
 
@@ -36,29 +36,16 @@ void SpekRuler::draw(wxDC& dc)
     wxSize size = dc.GetTextExtent(this->sample_label);
     int len = this->pos == TOP || this->pos == BOTTOM ? size.GetWidth() : size.GetHeight();
 
-    // Select the factor to use, we want some space between the labels.
-    int factor = 0;
-    for (const int candidate : this->factors) {
-        if (candidate == 0) {
-            break;
-        }
-        if (fabs(this->scale * candidate) >= this->spacing * len) {
-            factor = candidate;
-            break;
-        }
-    }
-
-    // Draw the ticks.
-    this->draw_tick(dc, this->min_units);
-    this->draw_tick(dc, this->max_units);
-
-    if (factor > 0) {
-        for (int tick = this->min_units + factor; tick < this->max_units; tick += factor) {
-            if (fabs(this->scale * (this->max_units - tick)) < len * 1.2) {
-                break;
-            }
-            this->draw_tick(dc, tick);
-        }
+    const auto ticks = spek_ruler_ticks(
+        this->factors,
+        this->min_units,
+        this->max_units,
+        this->scale,
+        this->spacing,
+        len
+    );
+    for (const int tick : ticks) {
+        this->draw_tick(dc, tick);
     }
 }
 

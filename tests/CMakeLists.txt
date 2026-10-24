@@ -18,6 +18,7 @@ add_executable(spek-test
     test.h
     test-audio.cc
     test-fft.cc
+    test-full-image.cc
     test-pipeline.cc
     test-utils.cc
 )
